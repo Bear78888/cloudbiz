@@ -25,25 +25,43 @@ export interface CurrentMembership {
 export async function getCurrentMembership(
   supabase: SupabaseClient,
 ): Promise<CurrentMembership | null> {
-  const { data, error } = await supabase
+  // Two plain reads instead of one embedded select. An embed depends on
+  // PostgREST resolving the foreign key from its schema cache, and when that
+  // resolution fails the call returns an *error* — which, treated as "no
+  // membership", sends a user who does have an organization back to
+  // onboarding, forever, with nothing in any log. Two reads cannot fail that
+  // way, and the cost is one extra round trip on a page that already makes
+  // several.
+  const { data: membership, error: membershipError } = await supabase
     .from("organization_members")
-    .select(
-      "organization_id, role, organizations (name, slug, trade, default_locale, timezone, currency)",
-    )
+    .select("organization_id, role")
     .eq("status", "active")
     .order("created_at", { ascending: true })
     .limit(1)
     .maybeSingle();
 
-  if (error || !data) return null;
-  const organization = Array.isArray(data.organizations)
-    ? data.organizations[0]
-    : data.organizations;
+  if (membershipError) {
+    console.error("[organizations] membership lookup failed:", membershipError.message);
+    return null;
+  }
+  if (!membership) return null;
+
+  const organizationId = membership.organization_id as string;
+  const { data: organization, error: organizationError } = await supabase
+    .from("organizations")
+    .select("name, slug, trade, default_locale, timezone, currency")
+    .eq("id", organizationId)
+    .maybeSingle();
+
+  if (organizationError) {
+    console.error("[organizations] organization lookup failed:", organizationError.message);
+    return null;
+  }
   if (!organization) return null;
 
   return {
-    organizationId: data.organization_id as string,
-    role: data.role as "owner" | "staff",
+    organizationId,
+    role: membership.role as "owner" | "staff",
     organizationName: organization.name as string,
     organizationSlug: organization.slug as string,
     trade: organization.trade as string,
