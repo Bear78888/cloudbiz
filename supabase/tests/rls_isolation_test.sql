@@ -211,6 +211,53 @@ begin
     raise exception 'FAIL(9f): soft-deleted job disappeared from the table';
   end if;
 
+  -- 9g. A plain field edit — the ordinary "open a job, fix a number, save".
+  --
+  -- This is the `job.updated` branch, taken when status, assignee and
+  -- deleted_at are all unchanged, and until 20260804000910 it raised
+  -- "malformed array literal" and aborted the UPDATE: the edit was silently
+  -- impossible while every check above passed. The three paths covered here
+  -- before — create, status change, soft delete/restore — each return from an
+  -- earlier branch and never reach that code. Covering the states around a
+  -- thing is not covering the thing.
+  update public.jobs
+     set title = 'Faucet replacement (rev 2)', job_total = 340.00, address = '12 Oak St'
+   where id = job_a;
+  if not exists (select 1 from public.jobs where id = job_a and job_total = 340.00) then
+    raise exception 'FAIL(9g1): a plain field edit did not persist';
+  end if;
+  if not exists (
+    select 1 from public.job_activities
+    where job_id = job_a and event_type = 'job.updated'
+      and metadata -> 'fields' @> '["title"]'::jsonb
+      and metadata -> 'fields' @> '["job_total"]'::jsonb
+      and metadata -> 'fields' @> '["address"]'::jsonb
+  ) then
+    raise exception 'FAIL(9g2): job.updated missing or does not list the changed fields';
+  end if;
+  -- Field names only, never the values themselves (§26.6).
+  if exists (
+    select 1 from public.job_activities
+    where job_id = job_a and event_type = 'job.updated'
+      and metadata::text like '%Oak St%'
+  ) then
+    raise exception 'FAIL(9g3): the activity trail leaked a field value, not just its name';
+  end if;
+
+  -- The same edit path on a customer.
+  update public.customers set name = 'John A. Smith', notes = 'gate code'
+   where id = customer_a;
+  if not exists (select 1 from public.customers where id = customer_a and name = 'John A. Smith') then
+    raise exception 'FAIL(9g4): a plain customer edit did not persist';
+  end if;
+  if not exists (
+    select 1 from public.job_activities
+    where customer_id = customer_a and event_type = 'customer.updated'
+      and metadata -> 'fields' @> '["name"]'::jsonb
+  ) then
+    raise exception 'FAIL(9g5): customer.updated missing or does not list the changed fields';
+  end if;
+
   -- 10. Owner B creates their own job and sees nothing of organization A.
   perform pg_temp.act_as('00000000-0000-0000-0000-00000000000b');
   insert into public.jobs (organization_id, title, status)
