@@ -119,6 +119,43 @@ test("search, bulk status change, soft delete and restore", async ({ page }) => 
   await expect(page.getByText("Job restored")).toBeVisible();
 });
 
+/**
+ * Editing an existing job — the plainest thing a user does after creating one,
+ * and the one path none of the specs above touch. Create, status change and
+ * soft delete each take their own branch in the activity trigger; a field edit
+ * takes the branch none of them reach, and that branch was broken outright
+ * (see 20260804000910). The edit failed, the user got an error instead of a
+ * saved change, and every other check stayed green.
+ */
+test("editing a job saves the change and records what changed", async ({ page }) => {
+  await signUp(page, uniqueEmail("e2e-edit"));
+  await createOrganization(page, "E2E Edit Plumbing");
+
+  await createJob(page, {
+    customer: "Maria Lopez",
+    phone: "(310) 555-0144",
+    title: "Water heater install",
+    jobTotal: "500",
+  });
+
+  await page.getByRole("link", { name: "Edit" }).click();
+  await page.waitForURL(/\/en\/app\/jobs\/[0-9a-f-]{36}\/edit$/);
+
+  await page.locator("#title").fill("Water heater install (rev 2)");
+  await page.locator("#job_total").fill("620");
+  await formWith(page, "#title").getByRole("button", { name: /Save job/i }).click();
+  await page.waitForURL(/\/en\/app\/jobs\/[0-9a-f-]{36}$/, { timeout: 30_000 });
+
+  // The edit persisted...
+  await expect(
+    page.getByRole("heading", { name: "Water heater install (rev 2)" }),
+  ).toBeVisible();
+  await expect(visibleText(page, "$620.00")).toBeVisible();
+  // ...and the list agrees, so this is the stored row and not a stale render.
+  await page.goto("/en/app/jobs");
+  await expect(visibleText(page, "Water heater install (rev 2)")).toBeVisible();
+});
+
 test("the form explains what is wrong instead of failing silently", async ({ page }) => {
   await signUp(page, uniqueEmail("e2e-validation"));
   await createOrganization(page, "E2E Validation Plumbing");
