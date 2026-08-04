@@ -633,6 +633,71 @@ export const en = {
       navDashboard: "Dashboard",
       navBilling: "Billing",
     },
+    /**
+     * Job Tracker (§13). `statuses`, `paymentStatuses`, `priorities`,
+     * `leadSources` and `views` are the display layer of the stable codes in
+     * `src/features/jobs/model.ts` (§13.6) — the codes never change, these
+     * strings do.
+     */
+    jobs: {
+      views: {
+        all_jobs: "All Jobs",
+        new_leads: "New Leads",
+        estimates: "Estimates",
+        scheduled: "Scheduled",
+        in_progress: "In Progress",
+        completed: "Completed",
+        unpaid: "Unpaid",
+        lost: "Lost",
+      },
+      statuses: {
+        new_lead: "New Lead",
+        contacted: "Contacted",
+        estimate_draft: "Estimate Draft",
+        estimate_sent: "Estimate Sent",
+        estimate_accepted: "Estimate Accepted",
+        scheduled: "Scheduled",
+        in_progress: "In Progress",
+        completed: "Completed",
+        paid: "Paid",
+        lost: "Lost",
+        canceled: "Canceled",
+      },
+      priorities: {
+        normal: "Normal",
+        urgent: "Urgent",
+      },
+      paymentStatuses: {
+        unpaid: "Unpaid",
+        partial: "Partly paid",
+        paid: "Paid",
+        refunded: "Refunded",
+      },
+      leadSources: {
+        phone_call: "Phone call",
+        website: "Website",
+        thumbtack: "Thumbtack",
+        yelp: "Yelp",
+        google: "Google",
+        referral: "Referral",
+        other: "Other",
+      },
+      sorts: {
+        newest: "Newest first",
+        oldest: "Oldest first",
+        scheduled: "By scheduled date",
+        amount: "By job total",
+      },
+      fieldErrors: {
+        required: "This field is required.",
+        too_long: "This is too long — please shorten it.",
+        invalid_email: "Enter a valid email address.",
+        invalid_amount: "Enter an amount like 280 or 280.50.",
+        invalid_date: "Enter a valid date and time.",
+        invalid_choice: "Choose one of the options.",
+        schedule_order: "The end time cannot be before the start time.",
+      },
+    },
     billing: {
       title: "Billing",
       sub: "Subscribe to tools one by one, or get All Tools and save about 30%.",
