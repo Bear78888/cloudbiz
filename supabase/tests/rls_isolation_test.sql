@@ -36,6 +36,7 @@ declare
   customer_a uuid;
   job_a uuid;
   job_b uuid;
+  import_result jsonb;
 begin
   -- User A creates an organization through the RPC.
   perform pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
@@ -290,6 +291,105 @@ begin
   end if;
   if exists (select 1 from public.jobs where organization_id = org_b) then
     raise exception 'FAIL(12c): staff member of A can read jobs of organization B';
+  end if;
+
+  -- 12b. CSV import (§14.15) runs as one atomic RPC. It is SECURITY DEFINER,
+  -- so its own membership check — not RLS — is what keeps tenants apart.
+  perform pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+  import_result := public.import_jobs(
+    org_a,
+    jsonb_build_array(
+      jsonb_build_object(
+        'customer', jsonb_build_object('name', 'John Smith', 'phone', '+1 (310) 555-0101'),
+        'job', jsonb_build_object('title', 'Imported drain clean', 'status', 'scheduled')
+      ),
+      jsonb_build_object(
+        'customer', jsonb_build_object('name', 'Maria Lopez', 'phone', '3105550202'),
+        'job', jsonb_build_object('title', 'Imported water heater', 'status', 'new_lead',
+                                  'job_total', '640.00')
+      )
+    )
+  );
+
+  if (import_result ->> 'jobs')::int <> 2 then
+    raise exception 'FAIL(12b1): import created % jobs, expected 2', import_result ->> 'jobs';
+  end if;
+  -- John Smith already exists from check 9 with the same number written
+  -- differently: he must be matched, not duplicated.
+  if (import_result ->> 'customers_matched')::int <> 1 then
+    raise exception 'FAIL(12b2): differently formatted phone did not match the existing customer';
+  end if;
+  if (import_result ->> 'customers_created')::int <> 1 then
+    raise exception 'FAIL(12b3): the new customer was not created';
+  end if;
+
+  -- The trail says "imported", not a hundred "created" (§13.11).
+  if not exists (
+    select 1 from public.job_activities
+    where organization_id = org_a and event_type = 'job.imported'
+  ) then
+    raise exception 'FAIL(12b4): import did not produce job.imported activities';
+  end if;
+  if exists (
+    select 1 from public.job_activities
+    where organization_id = org_a and event_type = 'job.created'
+      and job_id in (select id from public.jobs where title like 'Imported%')
+  ) then
+    raise exception 'FAIL(12b5): imported jobs were logged as ordinary creations';
+  end if;
+  -- The import context is transaction-local and must not leak to later writes.
+  insert into public.jobs (organization_id, title) values (org_a, 'After import');
+  if not exists (
+    select 1 from public.job_activities a
+    join public.jobs j on j.id = a.job_id
+    where j.title = 'After import' and a.event_type = 'job.created'
+  ) then
+    raise exception 'FAIL(12b6): the import activity context leaked past the import';
+  end if;
+
+  -- §26.6: the bulk write is audited.
+  if not exists (
+    select 1 from public.audit_logs
+    where organization_id = org_a and action = 'jobs.imported'
+  ) then
+    raise exception 'FAIL(12b7): the import was not written to the audit log';
+  end if;
+
+  -- Cross-tenant import is rejected by the RPC's own membership check.
+  mutation_blocked := false;
+  begin
+    perform public.import_jobs(
+      org_b,
+      jsonb_build_array(jsonb_build_object(
+        'customer', jsonb_build_object('name', 'Injected'),
+        'job', jsonb_build_object('title', 'Injected job')
+      ))
+    );
+  exception when others then
+    mutation_blocked := true;
+  end;
+  if not mutation_blocked then
+    raise exception 'FAIL(12b8): a member of A imported into organization B';
+  end if;
+
+  -- A row the client failed to validate aborts the whole import (all or nothing).
+  mutation_blocked := false;
+  begin
+    perform public.import_jobs(
+      org_a,
+      jsonb_build_array(jsonb_build_object(
+        'customer', jsonb_build_object('name', 'Bad Row'),
+        'job', jsonb_build_object('title', 'Bad status', 'status', 'not_a_status')
+      ))
+    );
+  exception when others then
+    mutation_blocked := true;
+  end;
+  if not mutation_blocked then
+    raise exception 'FAIL(12b9): an unknown status was accepted by the import';
+  end if;
+  if exists (select 1 from public.customers where name = 'Bad Row') then
+    raise exception 'FAIL(12b10): a failed import left a customer behind';
   end if;
 
   -- 13. Organizations are deletable while their history stays intact

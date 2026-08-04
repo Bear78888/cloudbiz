@@ -120,12 +120,20 @@ export default async function JobsPage({
           <h1 className="text-2xl font-bold text-slate-900">{j.title}</h1>
           <p className="mt-1 text-slate-600">{j.sub}</p>
         </div>
-        <Link
-          href={`/${l}/app/jobs/new`}
-          className="inline-flex min-h-12 items-center rounded-xl bg-brand-600 px-5 font-semibold text-white hover:bg-brand-700"
-        >
-          {j.addJob}
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <Link
+            href={`/${l}/app/jobs/import`}
+            className="inline-flex min-h-12 items-center rounded-xl border-2 border-brand-200 bg-white px-5 font-semibold text-brand-800 hover:border-brand-400 hover:bg-brand-50"
+          >
+            {j.importAction}
+          </Link>
+          <Link
+            href={`/${l}/app/jobs/new`}
+            className="inline-flex min-h-12 items-center rounded-xl bg-brand-600 px-5 font-semibold text-white hover:bg-brand-700"
+          >
+            {j.addJob}
+          </Link>
+        </div>
       </div>
 
       <JobsFilters
@@ -141,12 +149,20 @@ export default async function JobsPage({
           <h2 className="text-lg font-bold text-slate-900">{emptyCopy.title}</h2>
           <p className="mx-auto mt-2 max-w-md text-slate-600">{emptyCopy.body}</p>
           {!state.deleted && !filtered && state.view === "all_jobs" ? (
-            <Link
-              href={`/${l}/app/jobs/new`}
-              className="mt-5 inline-flex min-h-12 items-center rounded-xl bg-brand-600 px-6 font-semibold text-white hover:bg-brand-700"
-            >
-              {j.addFirstJob}
-            </Link>
+            <div className="mt-5 flex flex-wrap justify-center gap-3">
+              <Link
+                href={`/${l}/app/jobs/new`}
+                className="inline-flex min-h-12 items-center rounded-xl bg-brand-600 px-6 font-semibold text-white hover:bg-brand-700"
+              >
+                {j.addFirstJob}
+              </Link>
+              <Link
+                href={`/${l}/app/jobs/import`}
+                className="inline-flex min-h-12 items-center rounded-xl border-2 border-brand-200 bg-white px-6 font-semibold text-brand-800 hover:border-brand-400 hover:bg-brand-50"
+              >
+                {j.importAction}
+              </Link>
+            </div>
           ) : (
             <Link
               href={buildJobsHref(l, { view: "all_jobs" })}

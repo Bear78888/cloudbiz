@@ -145,7 +145,19 @@ export function JobsList({
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-slate-600">
-        <p aria-live="polite">{fmt(j.showing, { from, to, total })}</p>
+        <p aria-live="polite">
+          {fmt(j.showing, { from, to, total })}
+          {" · "}
+          {/* Export honours the current view and search (§13.8). */}
+          <a
+            href={`/${locale}/app/jobs/export?view=${state.view}&sort=${state.sort}${
+              state.q ? `&q=${encodeURIComponent(state.q)}` : ""
+            }`}
+            className="font-semibold text-brand-700 underline hover:text-brand-900"
+          >
+            {j.exportAction}
+          </a>
+        </p>
         {pageCount > 1 ? (
           <nav aria-label={fmt(j.pageOf, { page, pages: pageCount })} className="flex items-center gap-2">
             {page > 1 ? (
