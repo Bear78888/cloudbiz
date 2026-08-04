@@ -1,0 +1,64 @@
+# CI without secrets (audit §4.2): synthetic env literals exercise the
+# validation and build paths; the RLS job runs the real migrations and
+# cross-tenant isolation tests against a disposable Postgres.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - name: Build (public-site mode, no env)
+        run: npm run build
+      - name: Build (platform mode, synthetic env)
+        run: npm run build
+        env:
+          # The canonical project ref is pinned in src/lib/supabase/target.ts;
+          # it is public (part of the project URL), the keys stay synthetic.
+          NEXT_PUBLIC_SUPABASE_URL: https://whwzfdkdxyycsvyvyxdn.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: synthetic-anon-key
+          SUPABASE_PROJECT_REF: whwzfdkdxyycsvyvyxdn
+          SUPABASE_SERVICE_ROLE_KEY: synthetic-service-key
+
+  rls:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ha_test
+        ports:
+          - 54322:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGPASSWORD: postgres
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply Supabase shim
+        run: psql -h localhost -p 54322 -U postgres -d ha_test -v ON_ERROR_STOP=1 -f supabase/tests/supabase_shim.sql
+      - name: Apply migrations
+        run: |
+          for migration in supabase/migrations/*.sql; do
+            echo "Applying $migration"
+            psql -h localhost -p 54322 -U postgres -d ha_test -v ON_ERROR_STOP=1 -f "$migration"
+          done
+      - name: Run RLS isolation tests
+        run: psql -h localhost -p 54322 -U postgres -d ha_test -v ON_ERROR_STOP=1 -f supabase/tests/rls_isolation_test.sql
