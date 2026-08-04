@@ -58,5 +58,9 @@ export default defineConfig({
         url: "http://127.0.0.1:3100/en",
         reuseExistingServer: !process.env.CI,
         timeout: 120_000,
+        // Without this the server's own errors are invisible in CI and a
+        // failing test can only say "the element was not there".
+        stdout: "pipe",
+        stderr: "pipe",
       },
 });

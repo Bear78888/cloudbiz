@@ -55,6 +55,9 @@ export async function createOrganizationAction(
     timezone: input.timezone,
   });
   if ("error" in result) {
+    // §29 keeps the reason off the screen — but swallowing it entirely means
+    // a failed signup is undiagnosable in any environment.
+    console.error("[organizations] create_organization failed:", result.error);
     return { error: "generic" };
   }
 

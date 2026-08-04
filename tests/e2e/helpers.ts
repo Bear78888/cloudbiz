@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
 
 /**
  * Shared helpers for the end-to-end suite.
@@ -39,6 +39,10 @@ export async function createOrganization(page: Page, name: string): Promise<void
   await page.locator("#trade").selectOption("plumbing");
   await formWith(page, "#business_name").getByRole("button", { name: /Create my workspace/i }).click();
   await page.waitForURL(/\/en\/app(\?|$|\/)/, { timeout: 30_000 });
+  // The dashboard only renders once the organization exists, so this turns a
+  // failed creation into "onboarding did not complete" instead of a puzzling
+  // missing element three navigations later.
+  await expect(page.getByRole("heading", { name: /Dashboard/i })).toBeVisible();
 }
 
 export interface JobInput {

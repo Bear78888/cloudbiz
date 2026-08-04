@@ -104,6 +104,30 @@ jobs:
       - name: Run end-to-end tests
         run: npm run test:e2e
 
+      # When an e2e test fails the question is always the same: did the row
+      # reach the database or not? Answering it here beats guessing from a
+      # screenshot of a missing element.
+      - name: Diagnose on failure
+        if: failure()
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h 127.0.0.1 -p 54322 -U postgres -d postgres -c \
+            "select
+               (select count(*) from auth.users) as auth_users,
+               (select count(*) from public.profiles) as profiles,
+               (select count(*) from public.organizations) as organizations,
+               (select count(*) from public.organization_members) as members,
+               (select count(*) from public.jobs) as jobs;" || true
+          psql -h 127.0.0.1 -p 54322 -U postgres -d postgres -c \
+            "select rolname, rolsuper, rolbypassrls from pg_roles
+             where rolname in ('postgres','supabase_admin','authenticated','anon');" || true
+          psql -h 127.0.0.1 -p 54322 -U postgres -d postgres -c \
+            "select p.proname, r.rolname as owner, r.rolsuper, r.rolbypassrls
+             from pg_proc p join pg_roles r on r.oid = p.proowner
+             join pg_namespace n on n.oid = p.pronamespace
+             where n.nspname = 'public' and p.proname in ('create_organization','import_jobs');" || true
+
       - name: Stop the stack
         if: always()
         run: npx supabase stop --no-backup || true
