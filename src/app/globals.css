@@ -1,0 +1,49 @@
+@import "tailwindcss";
+
+@theme {
+  /* Brand: deep trustworthy blue */
+  --color-brand-50: #eef4ff;
+  --color-brand-100: #dbe7fe;
+  --color-brand-200: #bfd5fe;
+  --color-brand-300: #93bafd;
+  --color-brand-400: #6094fa;
+  --color-brand-500: #3b70f6;
+  --color-brand-600: #2554eb;
+  --color-brand-700: #1d43d8;
+  --color-brand-800: #1e39af;
+  --color-brand-900: #1e348a;
+  --color-brand-950: #172254;
+
+  /* Accent: work-glove amber for primary CTAs */
+  --color-accent-300: #fcd34d;
+  --color-accent-400: #fbbf24;
+  --color-accent-500: #f59e0b;
+  --color-accent-600: #d97706;
+  --color-accent-700: #b45309;
+
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  @apply bg-white text-slate-800 antialiased;
+}
+
+/* Visible focus for keyboard users (WCAG 2.2) */
+:focus-visible {
+  outline: 3px solid var(--color-brand-500);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Skip link */
+.skip-link {
+  @apply absolute -top-12 left-3 z-50 rounded-md bg-brand-700 px-4 py-2 text-sm font-semibold text-white transition-all;
+}
+.skip-link:focus {
+  @apply top-3;
+}
