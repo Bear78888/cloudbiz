@@ -7,6 +7,7 @@ import {
   derivePaymentStatus,
   isJobStatus,
   likePattern,
+  normalizePhone,
   quoteFilterValue,
   sortSpec,
   viewFilter,
@@ -127,11 +128,22 @@ async function findMatchingCustomerIds(
   term: string,
 ): Promise<string[]> {
   const pattern = quoteFilterValue(likePattern(term));
+  const clauses = [`name.ilike.${pattern}`, `phone.ilike.${pattern}`, `email.ilike.${pattern}`];
+
+  // A phone is searched in whatever shape it comes to mind — "310-555-0101",
+  // "(310) 555-0101", "+1 310 555 0101", "3105550101". `normalizePhone` drops
+  // the separators and the US country code, and the generated `phone_digits`
+  // column (20260804000500) holds the stored number in the same shape.
+  const digits = normalizePhone(term);
+  if (digits && digits.length >= 3) {
+    clauses.push(`phone_digits.ilike.${quoteFilterValue(`%${digits}%`)}`);
+  }
+
   const { data } = await supabase
     .from("customers")
     .select("id")
     .eq("organization_id", organizationId)
-    .or([`name.ilike.${pattern}`, `phone.ilike.${pattern}`, `email.ilike.${pattern}`].join(","))
+    .or(clauses.join(","))
     .limit(200);
   return (data ?? []).map((row) => row.id as string);
 }
@@ -266,7 +278,7 @@ async function resolveCustomerId(
   input: CustomerInput,
   existingCustomerId: string | null,
 ): Promise<string | null> {
-  const phone = input.phone?.replace(/\D+/g, "") ?? null;
+  const phone = normalizePhone(input.phone);
   let matchQuery = supabase
     .from("customers")
     .select("id, sms_consent")
@@ -274,7 +286,9 @@ async function resolveCustomerId(
     .is("deleted_at", null)
     .limit(1);
 
-  if (phone) matchQuery = matchQuery.ilike("phone", `%${phone.slice(-10)}`);
+  // Suffix match on the digits-only column, so "+1 310 555 0101" and
+  // "(310) 555-0101" resolve to the same customer.
+  if (phone) matchQuery = matchQuery.ilike("phone_digits", `%${phone}`);
   else if (input.email) matchQuery = matchQuery.eq("email", input.email);
   else if (existingCustomerId) matchQuery = matchQuery.eq("id", existingCustomerId);
   else matchQuery = matchQuery.eq("name", input.name);
