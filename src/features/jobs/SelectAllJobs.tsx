@@ -28,8 +28,11 @@ export function SelectAllJobs({ label }: { label: string }) {
           const form = event.target.closest("form");
           form
             ?.querySelectorAll<HTMLInputElement>('input[name="job_ids"]')
+            // The list renders both layouts and hides one with CSS (§13.9),
+            // so each job has two checkboxes. Only the one on screen may be
+            // toggled — ticking an invisible box is a change nobody can see.
             .forEach((input) => {
-              input.checked = next;
+              if (input.offsetParent !== null) input.checked = next;
             });
         }}
         className="h-5 w-5 rounded border-slate-400 text-brand-600 focus:ring-brand-500"

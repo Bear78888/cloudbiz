@@ -140,12 +140,17 @@ export async function changeJobStatusAction(formData: FormData): Promise<void> {
 export async function changeJobsStatusAction(formData: FormData): Promise<void> {
   const locale = localeFrom(formData);
   const status = String(formData.get("status") ?? "").trim();
-  const jobIds = formData
-    .getAll("job_ids")
-    .filter((value): value is string => typeof value === "string")
-    .map((value) => value.trim())
-    .filter(Boolean)
-    .slice(0, MAX_BULK_JOBS);
+  // Each job has a checkbox in both the table and the card layout (§13.9),
+  // so an id can legitimately arrive twice; dedupe before counting or capping.
+  const jobIds = [
+    ...new Set(
+      formData
+        .getAll("job_ids")
+        .filter((value): value is string => typeof value === "string")
+        .map((value) => value.trim())
+        .filter(Boolean),
+    ),
+  ].slice(0, MAX_BULK_JOBS);
 
   const returnTo = String(formData.get("return_to") ?? "").trim();
   const safeReturn =
