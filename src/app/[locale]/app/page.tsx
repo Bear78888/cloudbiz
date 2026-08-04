@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { countForDashboard } from "@/features/jobs/model";
+import { loadJobCounters } from "@/features/jobs/service";
 import { getCurrentMembership } from "@/features/organizations/service";
 import { PRODUCTS } from "@/lib/config";
 import { getDict } from "@/lib/i18n";
@@ -50,13 +52,26 @@ export default async function DashboardPage({
     entitlements.some((e) => e.feature_code === code && e.status === "active");
   const hasPaid = PRODUCTS.some((p) => isActive(p.code));
 
-  const summaryCards = [
-    d.cards.newLeads,
-    d.cards.estimatesWaiting,
-    d.cards.jobsThisWeek,
-    d.cards.unpaidJobs,
-    d.cards.callsAnswered,
-    d.cards.followUpsDue,
+  const counters = countForDashboard(
+    await loadJobCounters(supabase, membership.organizationId),
+    new Date(),
+  );
+  const hasJobs =
+    counters.newLeads + counters.estimatesWaiting + counters.jobsThisWeek + counters.unpaidJobs > 0;
+
+  // Cards fed by tools that do not exist yet show a dash rather than a
+  // reassuring zero (§29): "none" and "not built yet" are different answers.
+  const summaryCards: { label: string; value: number | null; href?: string }[] = [
+    { label: d.cards.newLeads, value: counters.newLeads, href: `/${l}/app/jobs?view=new_leads` },
+    {
+      label: d.cards.estimatesWaiting,
+      value: counters.estimatesWaiting,
+      href: `/${l}/app/jobs?view=estimates`,
+    },
+    { label: d.cards.jobsThisWeek, value: counters.jobsThisWeek, href: `/${l}/app/jobs?view=scheduled` },
+    { label: d.cards.unpaidJobs, value: counters.unpaidJobs, href: `/${l}/app/jobs?view=unpaid` },
+    { label: d.cards.callsAnswered, value: null },
+    { label: d.cards.followUpsDue, value: null },
   ];
 
   return (
@@ -68,30 +83,57 @@ export default async function DashboardPage({
         </span>
       </div>
 
-      {/* Summary cards (§20.2) — live values arrive with the Job Tracker (Stage 2). */}
+      {/* Summary cards (§20.2), the first four fed by the Job Tracker. */}
       <section aria-label={d.title}>
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
-          {summaryCards.map((label) => (
-            <div key={label} className="rounded-2xl border border-slate-200 bg-white p-4">
-              <p className="text-2xl font-bold text-slate-300">—</p>
-              <p className="mt-1 text-xs font-medium text-slate-600">{label}</p>
-            </div>
-          ))}
+          {summaryCards.map((card) => {
+            const body = (
+              <>
+                <p
+                  className={`text-2xl font-bold ${card.value === null ? "text-slate-300" : "text-slate-900"}`}
+                >
+                  {card.value === null ? "—" : card.value}
+                </p>
+                <p className="mt-1 text-xs font-medium text-slate-600">{card.label}</p>
+              </>
+            );
+            return card.href ? (
+              <Link
+                key={card.label}
+                href={card.href}
+                className="rounded-2xl border border-slate-200 bg-white p-4 hover:border-brand-300 hover:bg-brand-50"
+              >
+                {body}
+              </Link>
+            ) : (
+              <div key={card.label} className="rounded-2xl border border-slate-200 bg-white p-4">
+                {body}
+              </div>
+            );
+          })}
         </div>
-        <p className="mt-3 text-sm text-slate-500">{d.trackerTeaser}</p>
       </section>
 
-      {/* Recommended next step (§20.4): exactly one. */}
+      {/* Recommended next step (§20.4): exactly one, and the first one is
+          always the first job — that is what activation means (§31.3). */}
       <section className="rounded-2xl border border-brand-200 bg-brand-50 p-6">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-brand-800">
           {d.nextStepTitle}
         </h2>
-        <p className="mt-2 text-slate-800">{d.nextStepChooseTool}</p>
+        <p className="mt-2 text-slate-800">
+          {hasJobs ? d.nextStepChooseTool : d.nextStepAddFirstJob}
+        </p>
         <Link
-          href={membership.role === "owner" ? `/${l}/app/billing` : `/${l === "es" ? "es/precios" : "en/pricing"}`}
+          href={
+            hasJobs
+              ? membership.role === "owner"
+                ? `/${l}/app/billing`
+                : `/${l === "es" ? "es/precios" : "en/pricing"}`
+              : `/${l}/app/jobs/new`
+          }
           className="mt-4 inline-block rounded-xl bg-brand-600 px-5 py-2.5 font-semibold text-white hover:bg-brand-700"
         >
-          {d.nextStepSeePricing}
+          {hasJobs ? d.nextStepSeePricing : dict.platform.jobs.addFirstJob}
         </Link>
       </section>
 
@@ -117,14 +159,19 @@ export default async function DashboardPage({
               </li>
             );
           })}
-          <li className="rounded-2xl border border-dashed border-slate-300 bg-white p-5">
-            <div className="flex items-start justify-between gap-3">
-              <p className="font-semibold text-slate-900">{dict.jobTracker.name}</p>
-              <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-800">
-                {d.comingSoon}
-              </span>
-            </div>
-            <p className="mt-2 text-sm text-slate-600">{d.trackerTeaser}</p>
+          <li>
+            <Link
+              href={`/${l}/app/jobs`}
+              className="block h-full rounded-2xl border border-slate-200 bg-white p-5 hover:border-brand-300 hover:bg-brand-50"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <p className="font-semibold text-slate-900">{dict.jobTracker.name}</p>
+                <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-800">
+                  {d.toolStates.active}
+                </span>
+              </div>
+              <p className="mt-2 text-sm text-slate-600">{d.trackerTeaser}</p>
+            </Link>
           </li>
         </ul>
       </section>

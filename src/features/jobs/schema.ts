@@ -49,6 +49,7 @@ export type JobFormField =
   | "job_total"
   | "materials_cost"
   | "payment_status"
+  | "assigned_user_id"
   | "notes";
 
 export type JobFormErrors = Partial<Record<JobFormField, FieldErrorCode>>;
@@ -76,6 +77,7 @@ export interface JobFieldsInput {
   job_total: number | null;
   materials_cost: number | null;
   payment_status: PaymentStatus;
+  assigned_user_id: string | null;
   notes: string | null;
 }
 
@@ -95,6 +97,8 @@ const MAX_LONG = 5000;
 
 /** Deliberately permissive: `a@b.c`. Deliverability is the mail provider's job. */
 const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const UUID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function text(raw: string | undefined): string {
   return (raw ?? "").trim();
@@ -158,6 +162,13 @@ export function parseJobForm(raw: RawForm, timeZone: string): JobFormResult {
   const sourceRaw = optionalText(raw.source);
   if (sourceRaw !== null && !inRegistry(sourceRaw, LEAD_SOURCES)) errors.source = "invalid_choice";
 
+  // The form only ever offers real member ids; the shape check keeps a
+  // hand-crafted POST from reaching the database with something else.
+  const assignedRaw = optionalText(raw.assigned_user_id);
+  if (assignedRaw !== null && !UUID_SHAPE.test(assignedRaw)) {
+    errors.assigned_user_id = "invalid_choice";
+  }
+
   const amounts = (["estimate_amount", "job_total", "materials_cost"] as const).map((field) => {
     const parsed = parseMoney(raw[field]);
     if (parsed === undefined) errors[field] = "invalid_amount";
@@ -206,6 +217,7 @@ export function parseJobForm(raw: RawForm, timeZone: string): JobFormResult {
         job_total: amounts[1],
         materials_cost: amounts[2],
         payment_status: paymentRaw as PaymentStatus,
+        assigned_user_id: assignedRaw,
         notes,
       },
     },

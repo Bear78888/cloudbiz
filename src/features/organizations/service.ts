@@ -12,6 +12,9 @@ export interface CurrentMembership {
   organizationSlug: string;
   trade: string;
   defaultLocale: Locale;
+  /** IANA zone (§25.1): scheduled jobs are entered and shown in it. */
+  timezone: string;
+  currency: string;
 }
 
 /**
@@ -24,7 +27,9 @@ export async function getCurrentMembership(
 ): Promise<CurrentMembership | null> {
   const { data, error } = await supabase
     .from("organization_members")
-    .select("organization_id, role, organizations (name, slug, trade, default_locale)")
+    .select(
+      "organization_id, role, organizations (name, slug, trade, default_locale, timezone, currency)",
+    )
     .eq("status", "active")
     .order("created_at", { ascending: true })
     .limit(1)
@@ -43,6 +48,8 @@ export async function getCurrentMembership(
     organizationSlug: organization.slug as string,
     trade: organization.trade as string,
     defaultLocale: (organization.default_locale as Locale) ?? "en",
+    timezone: (organization.timezone as string) ?? "America/New_York",
+    currency: (organization.currency as string) ?? "usd",
   };
 }
 
