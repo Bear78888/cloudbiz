@@ -15,17 +15,21 @@ export function uniqueEmail(prefix: string): string {
 
 export const TEST_PASSWORD = "e2e-Test-Password-2026";
 
-/** The dashboard shell has its own submit button (sign out) — always scope. */
-export function mainForm(page: Page) {
-  return page.locator("main form");
+/**
+ * Forms are located by a field they own. The locale layout wraps everything in
+ * one <main> and the app shell adds its own header form (sign out) inside it,
+ * so "the form in main" is ambiguous on every signed-in page.
+ */
+export function formWith(page: Page, fieldId: string) {
+  return page.locator(`form:has(${fieldId})`);
 }
 
 /** Signs up through the real UI and lands on onboarding (§10.1, §10.3). */
 export async function signUp(page: Page, email: string): Promise<void> {
   await page.goto("/en/sign-up");
-  await page.getByLabel("Email", { exact: true }).fill(email);
-  await page.getByLabel("Password", { exact: true }).fill(TEST_PASSWORD);
-  await page.getByRole("button", { name: "Create Account" }).click();
+  await page.locator("#signup-email").fill(email);
+  await page.locator("#signup-password").fill(TEST_PASSWORD);
+  await formWith(page, "#signup-email").getByRole("button", { name: /Create Account/i }).click();
   await page.waitForURL(/\/en\/onboarding/, { timeout: 30_000 });
 }
 
@@ -33,7 +37,7 @@ export async function signUp(page: Page, email: string): Promise<void> {
 export async function createOrganization(page: Page, name: string): Promise<void> {
   await page.locator("#business_name").fill(name);
   await page.locator("#trade").selectOption("plumbing");
-  await mainForm(page).getByRole("button", { name: /Create my workspace/i }).click();
+  await formWith(page, "#business_name").getByRole("button", { name: /Create my workspace/i }).click();
   await page.waitForURL(/\/en\/app(\?|$|\/)/, { timeout: 30_000 });
 }
 
@@ -56,7 +60,7 @@ export async function createJob(page: Page, job: JobInput): Promise<string> {
   if (job.scheduledStart) await page.locator("#scheduled_start").fill(job.scheduledStart);
   if (job.jobTotal) await page.locator("#job_total").fill(job.jobTotal);
 
-  await mainForm(page).getByRole("button", { name: /Save job/i }).click();
+  await formWith(page, "#customer_name").getByRole("button", { name: /Save job/i }).click();
   await page.waitForURL(/\/en\/app\/jobs\/[0-9a-f-]{36}$/, { timeout: 30_000 });
   return page.url();
 }

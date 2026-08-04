@@ -36,7 +36,13 @@ export default defineConfig({
   },
 
   projects: [
-    { name: "chromium", use: { ...devices["Desktop Chrome"] } },
+    {
+      name: "chromium",
+      // The mobile spec asserts the phone layout; running it at desktop width
+      // would assert the opposite of what it means.
+      testIgnore: /mobile\.spec\.ts/,
+      use: { ...devices["Desktop Chrome"] },
+    },
     {
       // §13.9 explicitly requires the phone layout to work, so it gets its own run.
       name: "mobile",

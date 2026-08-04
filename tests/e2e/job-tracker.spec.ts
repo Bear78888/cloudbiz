@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { createJob, createOrganization, mainForm, signUp, uniqueEmail } from "./helpers";
+import { createJob, createOrganization, formWith, signUp, uniqueEmail } from "./helpers";
 
 /**
  * The scenario that matters most (§37.3 A): sign up → set up the company →
@@ -95,8 +95,11 @@ test("search, bulk status change, soft delete and restore", async ({ page }) => 
   await page.locator('form:has(input[name="deleted"])').getByRole("button").click();
   await page.waitForURL(/\/en\/app\/jobs(\?|$)/);
 
+  // The deleted job is listed under the Deleted filter and nowhere else.
   await page.goto("/en/app/jobs?deleted=1");
-  await expect(page.getByText("Deleted").first()).toBeVisible();
+  await expect(page.getByText("Deleted", { exact: true }).first()).toBeVisible();
+  // The bulk bar is not offered here: a deleted job is restored, not restatused.
+  await expect(page.locator("#bulk-status")).toHaveCount(0);
 
   await page.goto(deletedJobUrl);
   await expect(page.getByText("This job is deleted.")).toBeVisible();
@@ -115,7 +118,7 @@ test("the form explains what is wrong instead of failing silently", async ({ pag
   await page.locator("#customer_name").fill("Bad Input");
   await page.locator("#title").fill("Bad amount");
   await page.locator("#job_total").fill("abc");
-  await mainForm(page).getByRole("button", { name: /Save job/i }).click();
+  await formWith(page, "#customer_name").getByRole("button", { name: /Save job/i }).click();
 
   await expect(page.getByText("Enter an amount like 280 or 280.50.")).toBeVisible();
   // Nothing was saved: the tracker is still empty.
