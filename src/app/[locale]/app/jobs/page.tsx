@@ -183,6 +183,7 @@ export default async function JobsPage({
           total={total}
           page={page}
           pageCount={pageCount}
+          returnTo={buildJobsHref(l, { ...state, page })}
         />
       )}
     </div>

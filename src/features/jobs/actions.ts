@@ -9,7 +9,15 @@ import { isLocale, type Locale } from "@/lib/routes";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { JobActionState } from "./action-state";
 import { parseJobForm, type RawForm } from "./schema";
-import { createJob, getJob, setJobDeleted, setJobStatus, updateJob } from "./service";
+import {
+  MAX_BULK_JOBS,
+  createJob,
+  getJob,
+  setJobDeleted,
+  setJobStatus,
+  setJobsStatus,
+  updateJob,
+} from "./service";
 
 /**
  * Server actions for the Job Tracker (§13.8).
@@ -122,6 +130,45 @@ export async function changeJobStatusAction(formData: FormData): Promise<void> {
 
   revalidatePath(`/${locale}/app/jobs`);
   revalidatePath(`/${locale}/app/jobs/${jobId}`);
+}
+
+/**
+ * Bulk status change (§13.8). The selection arrives as repeated `job_ids`
+ * fields from an ordinary form, so it works before JavaScript loads; ids the
+ * caller does not own are filtered out by the organization scope and by RLS.
+ */
+export async function changeJobsStatusAction(formData: FormData): Promise<void> {
+  const locale = localeFrom(formData);
+  const status = String(formData.get("status") ?? "").trim();
+  const jobIds = formData
+    .getAll("job_ids")
+    .filter((value): value is string => typeof value === "string")
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .slice(0, MAX_BULK_JOBS);
+
+  const returnTo = String(formData.get("return_to") ?? "").trim();
+  const safeReturn =
+    returnTo.startsWith(`/${locale}/app/jobs`) && !returnTo.startsWith("//")
+      ? returnTo
+      : `/${locale}/app/jobs`;
+
+  const { supabase, membership } = await requireContext();
+  if (!membership) redirect(`/${locale}/onboarding`);
+
+  if (jobIds.length > 0) {
+    const result = await setJobsStatus(supabase, membership.organizationId, jobIds, status);
+    if (!("error" in result)) {
+      trackServerEvent("job_status_changed", {
+        organization_id: membership.organizationId,
+        status,
+        bulk: result.changed,
+      });
+    }
+  }
+
+  revalidatePath(`/${locale}/app/jobs`);
+  redirect(safeReturn);
 }
 
 /** Soft delete and restore share an action — both are a `deleted_at` write (§14.12). */

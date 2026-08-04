@@ -5,6 +5,7 @@ import {
   MAX_SEARCH_LENGTH,
   buildJobSearchFilter,
   countForDashboard,
+  groupByPaymentOutcome,
   likePattern,
   quoteFilterValue,
 } from "@/features/jobs/model";
@@ -158,5 +159,47 @@ describe("list URLs", () => {
 
   it("drops page 1 so the first page has one canonical URL", () => {
     expect(buildJobsHref("en", { view: "lost", page: 1 })).toBe("/en/app/jobs?view=lost");
+  });
+});
+
+describe("bulk status change (§13.8)", () => {
+  it("collapses to a single update when every job ends up the same", () => {
+    const grouped = groupByPaymentOutcome(
+      [
+        { id: "a", payment_status: "unpaid" },
+        { id: "b", payment_status: "partial" },
+        { id: "c", payment_status: "paid" },
+      ],
+      "paid",
+    );
+    // Marking work paid settles all three, so one UPDATE covers the selection.
+    expect([...grouped.keys()]).toEqual(["paid"]);
+    expect(grouped.get("paid")).toEqual(["a", "b", "c"]);
+  });
+
+  it("splits when the outcome differs per job", () => {
+    const grouped = groupByPaymentOutcome(
+      [
+        { id: "a", payment_status: "paid" },
+        { id: "b", payment_status: "unpaid" },
+      ],
+      "canceled",
+    );
+    // Canceling collected work flags a refund; unpaid work just stays unpaid.
+    expect(grouped.get("refunded")).toEqual(["a"]);
+    expect(grouped.get("unpaid")).toEqual(["b"]);
+  });
+
+  it("never needs more updates than there are payment statuses", () => {
+    const many = Array.from({ length: 200 }, (_, i) => ({
+      id: `job-${i}`,
+      payment_status: (["unpaid", "partial", "paid", "refunded"] as const)[i % 4],
+    }));
+    expect(groupByPaymentOutcome(many, "in_progress").size).toBeLessThanOrEqual(4);
+    expect(groupByPaymentOutcome(many, "paid").size).toBe(1);
+  });
+
+  it("returns nothing for an empty selection", () => {
+    expect(groupByPaymentOutcome([], "scheduled").size).toBe(0);
   });
 });

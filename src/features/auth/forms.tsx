@@ -7,6 +7,7 @@ import { GOOGLE_AUTH_ENABLED } from "@/lib/config";
 import type { Dict } from "@/lib/i18n";
 import type { Locale } from "@/lib/routes";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { authErrorMessageKey, type AuthErrorLike } from "./errors";
 
 /**
  * Functional sign-in / sign-up forms (§10.1: email+password, magic link,
@@ -67,7 +68,10 @@ function SignInFormInner({ locale, strings }: { locale: Locale; strings: AuthStr
       const supabase = createSupabaseBrowserClient();
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) {
-        setNotice({ tone: "error", text: flow.invalidCredentials });
+        // A rate limit or a disabled provider is not "wrong password";
+        // telling someone to re-check credentials they typed correctly is
+        // the fastest way to make them think the product is broken.
+        setNotice({ tone: "error", text: flow[authErrorMessageKey(error as AuthErrorLike)] });
         return;
       }
       router.push(nextPath);
@@ -96,7 +100,7 @@ function SignInFormInner({ locale, strings }: { locale: Locale; strings: AuthStr
       });
       setNotice(
         error
-          ? { tone: "error", text: flow.genericError }
+          ? { tone: "error", text: flow[authErrorMessageKey(error as AuthErrorLike)] }
           : { tone: "success", text: flow.magicLinkSent },
       );
     } catch {
@@ -212,7 +216,10 @@ export function SignUpForm({ locale, strings }: { locale: Locale; strings: AuthS
         },
       });
       if (error) {
-        setNotice({ tone: "error", text: flow.genericError });
+        // §29: tell them what to change. A password rejected as breached or
+        // too weak is the one case where "something went wrong" guarantees
+        // the user retypes exactly the same password.
+        setNotice({ tone: "error", text: flow[authErrorMessageKey(error as AuthErrorLike)] });
         return;
       }
       if (data.session) {
