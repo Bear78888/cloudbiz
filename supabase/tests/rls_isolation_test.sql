@@ -36,6 +36,7 @@ declare
   customer_a uuid;
   job_a uuid;
   job_b uuid;
+  job_outbox uuid;
   import_result jsonb;
   relation_name text;
 begin
@@ -575,6 +576,104 @@ begin
           ));
   end if;
 
+  -- 16. Sync outbox (§14.9, §14.11). The queue is written in the same
+  -- transaction as the data change, so it cannot disagree with the database it
+  -- mirrors — which also means these assertions are about the trigger, not
+  -- about any worker.
+  perform pg_temp.act_as_postgres();
+  delete from public.sync_outbox;
+
+  perform pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+  insert into public.jobs (organization_id, customer_id, title, status)
+  values (org_a, customer_a, 'Outbox probe', 'new_lead')
+  returning id into job_outbox;
+
+  if not exists (
+    select 1 from public.sync_outbox
+    where entity_type = 'job' and entity_id = job_outbox
+      and operation = 'upsert' and status = 'pending'
+  ) then
+    raise exception 'FAIL(16a): creating a job did not enqueue a sync event';
+  end if;
+
+  -- Debounce (§14.11): a burst of edits must cost one write to the sheet, not
+  -- one per edit. The partial unique index collapses them into the waiting
+  -- event instead of queueing three.
+  update public.jobs set title = 'Outbox probe 1' where id = job_outbox;
+  update public.jobs set title = 'Outbox probe 2' where id = job_outbox;
+  update public.jobs set title = 'Outbox probe 3' where id = job_outbox;
+  select count(*) into visible_count
+    from public.sync_outbox where entity_type = 'job' and entity_id = job_outbox;
+  if visible_count <> 1 then
+    raise exception 'FAIL(16b): three rapid edits produced % events, expected 1 (debounce)', visible_count;
+  end if;
+
+  -- An edit that changes nothing but `updated_at` is not worth a Google API
+  -- call, and must not reopen a settled event.
+  perform pg_temp.act_as_postgres();
+  update public.sync_outbox set status = 'synced', processed_at = now()
+   where entity_type = 'job' and entity_id = job_outbox;
+  perform pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+  update public.jobs set title = 'Outbox probe 3' where id = job_outbox;
+  if exists (
+    select 1 from public.sync_outbox
+    where entity_type = 'job' and entity_id = job_outbox and status <> 'synced'
+  ) then
+    raise exception 'FAIL(16c): a no-op save enqueued a sync event';
+  end if;
+
+  -- A real edit after the previous event was synced starts a new one; the
+  -- settled event is left alone, so the history of what was sent survives.
+  update public.jobs set title = 'Outbox probe 4' where id = job_outbox;
+  if not exists (
+    select 1 from public.sync_outbox
+    where entity_type = 'job' and entity_id = job_outbox and status = 'pending'
+  ) then
+    raise exception 'FAIL(16d): an edit after a synced event did not enqueue a new one';
+  end if;
+  if not exists (
+    select 1 from public.sync_outbox
+    where entity_type = 'job' and entity_id = job_outbox and status = 'synced'
+  ) then
+    raise exception 'FAIL(16e): the already-synced event was overwritten instead of kept';
+  end if;
+
+  -- §14.12: a soft delete is still an upsert. The row is marked Deleted = TRUE
+  -- in the sheet, not removed from it — dropping the row would lose the record
+  -- the owner may still be looking at.
+  perform pg_temp.act_as_postgres();
+  update public.sync_outbox set status = 'synced' where entity_id = job_outbox;
+  perform pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+  update public.jobs set deleted_at = now() where id = job_outbox;
+  if not exists (
+    select 1 from public.sync_outbox
+    where entity_id = job_outbox and status = 'pending' and operation = 'upsert'
+  ) then
+    raise exception 'FAIL(16f): a soft delete did not enqueue an upsert (§14.12)';
+  end if;
+
+  -- The client may read its own queue (the "Pending changes" counter, §14.13)
+  -- and nothing else. Another organization's queue is invisible.
+  perform pg_temp.act_as('00000000-0000-0000-0000-00000000000b');
+  if exists (select 1 from public.sync_outbox where organization_id = org_a) then
+    raise exception 'FAIL(16g): organization B can read organization A''s sync queue';
+  end if;
+
+  -- 17. Refresh tokens are unreachable from any client role (§14.16).
+  -- The table has no policy and no grant, so this is refused at the grant
+  -- layer rather than returning an empty set — the distinction that mattered
+  -- in 20260804000900.
+  begin
+    perform 1 from public.google_oauth_tokens limit 1;
+    raise exception 'FAIL(17): authenticated can read google_oauth_tokens';
+  exception
+    when insufficient_privilege then null; -- expected
+    when others then
+      if sqlerrm like 'FAIL(17)%' then raise; end if;
+      raise;
+  end;
+
+  perform pg_temp.act_as_postgres();
   raise notice 'RLS isolation tests passed';
 end;
 $$;
