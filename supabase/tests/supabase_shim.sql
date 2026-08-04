@@ -39,3 +39,11 @@ $$;
 grant usage on schema public to anon, authenticated, service_role;
 alter default privileges in schema public
   grant select, insert, update, delete on tables to anon, authenticated, service_role;
+
+-- Supabase grants EXECUTE on every new function directly to these roles, and
+-- a `revoke ... from public` does not remove a direct grant. Reproducing that
+-- here is what lets the RLS tests catch a SECURITY DEFINER function that ships
+-- callable by anon (advisor 0028) — twice now it has been caught only after
+-- deploy, see 20260804000200 and 20260804000700.
+alter default privileges in schema public
+  grant execute on functions to anon, authenticated, service_role;

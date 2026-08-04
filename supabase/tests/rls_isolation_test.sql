@@ -355,6 +355,15 @@ begin
     raise exception 'FAIL(12b7): the import was not written to the audit log';
   end if;
 
+  -- An anonymous caller cannot reach the import at all: the EXECUTE grant is
+  -- revoked (20260804000700) and the function fails closed regardless.
+  if has_function_privilege('anon', 'public.import_jobs(uuid, jsonb)', 'EXECUTE') then
+    raise exception 'FAIL(12b7a): anon can execute import_jobs';
+  end if;
+  if not has_function_privilege('authenticated', 'public.import_jobs(uuid, jsonb)', 'EXECUTE') then
+    raise exception 'FAIL(12b7b): authenticated cannot execute import_jobs';
+  end if;
+
   -- Cross-tenant import is rejected by the RPC's own membership check.
   mutation_blocked := false;
   begin
