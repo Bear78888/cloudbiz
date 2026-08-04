@@ -141,12 +141,24 @@ begin
     raise exception 'FAIL(8b): audit_logs delete was not blocked';
   end if;
 
-  -- 9. Unauthenticated (anon) sees nothing.
+  -- 9. Organizations are deletable while their audit history stays intact
+  -- (regression: an FK ON DELETE SET NULL used to collide with the
+  -- immutability trigger and block deletion entirely).
+  perform pg_temp.act_as_postgres();
+  delete from public.organizations where id = org_b;
+  if exists (select 1 from public.organizations where id = org_b) then
+    raise exception 'FAIL(9a): organization B was not deleted';
+  end if;
+  if not exists (select 1 from public.audit_logs where organization_id = org_b) then
+    raise exception 'FAIL(9b): audit history of deleted organization B was lost';
+  end if;
+
+  -- 10. Unauthenticated (anon) sees nothing.
   perform set_config('request.jwt.claim.sub', '', true);
   perform set_config('role', 'anon', true);
   select count(*) into visible_count from public.organizations;
   if visible_count <> 0 then
-    raise exception 'FAIL(9): anon sees % organizations', visible_count;
+    raise exception 'FAIL(10): anon sees % organizations', visible_count;
   end if;
 
   perform pg_temp.act_as_postgres();
