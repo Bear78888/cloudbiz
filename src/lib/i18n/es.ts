@@ -593,6 +593,12 @@ export const es: Dict = {
       confirmationSent: "Revisa tu correo para confirmar tu cuenta.",
       invalidCredentials: "El correo y la contraseña no coinciden. Inténtalo de nuevo.",
       passwordTooShort: "La contraseña debe tener al menos 8 caracteres.",
+      passwordLeaked:
+        "Esta contraseña apareció en una filtración de datos conocida, así que no es segura. Elige otra, por favor.",
+      passwordWeak: "Elige una contraseña más fuerte: agrega longitud, números o símbolos.",
+      emailTaken: "Ya existe una cuenta con este correo. Mejor inicia sesión.",
+      emailInvalid: "Revisa la dirección de correo e inténtalo de nuevo.",
+      rateLimited: "Demasiados intentos. Espera un minuto e inténtalo de nuevo.",
       genericError: "El inicio de sesión no funciona en este momento. Inténtalo en un minuto.",
       notConfigured: "El inicio de sesión aún no está disponible. Vuelve pronto.",
       working: "Un momento…",
@@ -831,6 +837,14 @@ export const es: Dict = {
       voiceDeferred: "Agregar por voz llega más adelante; por ahora, escríbelo.",
       importAction: "Importar desde una hoja de cálculo",
       exportAction: "Exportar CSV",
+      bulk: {
+        title: "Cambiar el estado de lo seleccionado",
+        selectAll: "Seleccionar todo en esta página",
+        selectJob: "Seleccionar {job}",
+        selectColumn: "Seleccionar",
+        apply: "Aplicar a lo seleccionado",
+        hint: "Marca los trabajos que quieras, elige un estado y aplica. Cada cambio queda en el historial de ese trabajo.",
+      },
       import: {
         title: "Importa tus trabajos",
         sub: "Trae la lista que ya llevas en una hoja de cálculo. No se guarda nada hasta que tú lo digas.",

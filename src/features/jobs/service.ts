@@ -5,6 +5,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   buildJobSearchFilter,
   derivePaymentStatus,
+  groupByPaymentOutcome,
   isJobStatus,
   likePattern,
   normalizePhone,
@@ -405,6 +406,54 @@ export async function setJobStatus(
     .eq("organization_id", organizationId);
 
   return error ? { error: "generic" } : { ok: true };
+}
+
+export const MAX_BULK_JOBS = 100;
+
+/**
+ * Bulk status change (§13.8). `derivePaymentStatus` depends on each job's
+ * current payment status, so the selection is read once and then written back
+ * grouped by outcome — at most four UPDATEs regardless of how many jobs were
+ * picked. The activity trail is still one entry per job: the triggers see
+ * every changed row (§13.11).
+ */
+export async function setJobsStatus(
+  supabase: SupabaseClient,
+  organizationId: string,
+  jobIds: readonly string[],
+  nextStatus: string,
+): Promise<{ changed: number } | { error: "generic" | "invalid_choice" | "empty" | "too_many" }> {
+  if (!isJobStatus(nextStatus)) return { error: "invalid_choice" };
+  if (jobIds.length === 0) return { error: "empty" };
+  if (jobIds.length > MAX_BULK_JOBS) return { error: "too_many" };
+
+  const { data: current, error: readError } = await supabase
+    .from("jobs")
+    .select("id, payment_status")
+    .eq("organization_id", organizationId)
+    .is("deleted_at", null)
+    .in("id", jobIds);
+
+  if (readError) return { error: "generic" };
+  if (!current || current.length === 0) return { error: "empty" };
+
+  const byPayment = groupByPaymentOutcome(
+    current.map((row) => ({ id: row.id as string, payment_status: row.payment_status as PaymentStatus })),
+    nextStatus,
+  );
+
+  let changed = 0;
+  for (const [payment, ids] of byPayment) {
+    const { error } = await supabase
+      .from("jobs")
+      .update({ status: nextStatus, payment_status: payment })
+      .eq("organization_id", organizationId)
+      .in("id", ids);
+    if (error) return { error: "generic" };
+    changed += ids.length;
+  }
+
+  return { changed };
 }
 
 /** Soft delete (§14.12): the row and its history stay, the list hides it. */

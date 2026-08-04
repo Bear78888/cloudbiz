@@ -181,6 +181,26 @@ export function derivePaymentStatus(
   return currentPaymentStatus;
 }
 
+/**
+ * Bulk status change (§13.8): which jobs end up with which payment status.
+ * Because `derivePaymentStatus` depends on each job's current state, a bulk
+ * update cannot be one blanket write — but it also need not be one write per
+ * job. Grouping by outcome bounds it at four UPDATEs however many are picked.
+ */
+export function groupByPaymentOutcome(
+  jobs: readonly { id: string; payment_status: PaymentStatus }[],
+  nextStatus: JobStatus,
+): Map<PaymentStatus, string[]> {
+  const grouped = new Map<PaymentStatus, string[]>();
+  for (const job of jobs) {
+    const outcome = derivePaymentStatus(nextStatus, job.payment_status);
+    const bucket = grouped.get(outcome);
+    if (bucket) bucket.push(job.id);
+    else grouped.set(outcome, [job.id]);
+  }
+  return grouped;
+}
+
 /** Statuses that mean the job is over, one way or another. */
 export const CLOSED_STATUSES: readonly JobStatus[] = ["paid", "lost", "canceled"];
 

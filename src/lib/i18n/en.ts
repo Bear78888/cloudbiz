@@ -586,6 +586,14 @@ export const en = {
       confirmationSent: "Check your email to confirm your account.",
       invalidCredentials: "That email and password don't match. Try again.",
       passwordTooShort: "Password must be at least 8 characters.",
+      /* Supabase checks new passwords against known breaches (§26). Say what
+         happened plainly: this is about the password, not about the person. */
+      passwordLeaked:
+        "This password has shown up in a known data breach, so it isn't safe to use. Please pick a different one.",
+      passwordWeak: "Please pick a stronger password — try adding length, numbers or symbols.",
+      emailTaken: "An account with this email already exists. Try signing in instead.",
+      emailInvalid: "Please check the email address and try again.",
+      rateLimited: "Too many attempts. Please wait a minute and try again.",
       genericError: "Sign-in isn't working right now. Please try again in a minute.",
       notConfigured: "Sign-in isn't open yet. Please check back soon.",
       working: "One moment…",
@@ -830,6 +838,14 @@ export const en = {
       voiceDeferred: "Add by Voice is coming later — for now, type it in.",
       importAction: "Import from a spreadsheet",
       exportAction: "Export CSV",
+      bulk: {
+        title: "Change status of selected",
+        selectAll: "Select all on this page",
+        selectJob: "Select {job}",
+        selectColumn: "Select",
+        apply: "Apply to selected",
+        hint: "Tick the jobs you want, choose a status, then apply. Each change is recorded in that job's history.",
+      },
       import: {
         title: "Import your jobs",
         sub: "Bring in the list you already keep in a spreadsheet. Nothing is saved until you say so.",
