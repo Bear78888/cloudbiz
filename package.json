@@ -1,0 +1,28 @@
+{
+  "name": "handyalliance-platform",
+  "version": "0.1.0",
+  "private": true,
+  "description": "HandyAlliance — simple tools for home service pros (bilingual en-US / es-US)",
+  "engines": {
+    "node": ">=20.9.0"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "next": "16.2.12",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.1.0",
+    "@types/node": "26.1.2",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.3",
+    "tailwindcss": "^4.1.0",
+    "typescript": "6.0.3"
+  }
+}
