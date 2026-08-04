@@ -647,6 +647,40 @@ export const es: Dict = {
       navDashboard: "Panel",
       navBilling: "Facturación",
     },
+    google: {
+      title: "Hojas de cálculo de Google",
+      subtitle:
+        "Tus trabajos se organizan en HandyAlliance y se sincronizan automáticamente con tu Hoja de cálculo de Google.",
+      notConnectedTitle: "Aún no está conectado",
+      notConnectedBody:
+        "Conecta Google y HandyAlliance mantendrá una hoja de cálculo actualizada por ti: útil para compartir, imprimir o conectar con otras herramientas.",
+      connect: "Conectar Google",
+      reconnect: "Volver a conectar Google",
+      connectedAs: "Conectado como",
+      connectedSince: "Conectado",
+      pendingChanges: "Cambios pendientes de sincronizar",
+      statusActive: "Conectado",
+      statusNeedsReconnect: "Necesita volver a conectarse",
+      scopeNote:
+        "HandyAlliance solo puede ver la hoja de cálculo que crea para ti. No puede ver el resto de tu Google Drive.",
+      ownerOnly: "Solo el propietario puede conectar Google.",
+      messages: {
+        connected: "Google está conectado.",
+        access_denied: "Cancelaste el inicio de sesión de Google. No cambió nada.",
+        no_refresh_token:
+          "Google no nos dio acceso permanente. Vuelve a conectar y aprueba la solicitud.",
+        insufficient_scope:
+          "HandyAlliance necesita permiso para crear tu hoja de cálculo. Inténtalo de nuevo y deja ese permiso marcado.",
+        owner_only: "Solo el propietario puede conectar Google.",
+        signed_out: "Tu sesión terminó antes de completar el proceso. Inicia sesión e inténtalo de nuevo.",
+        not_configured: "La sincronización con Google aún no está configurada en este sitio.",
+        failed: "No pudimos conectar con Google. Inténtalo de nuevo.",
+        token_unreadable:
+          "Ya no se puede leer tu conexión con Google. Vuelve a conectar Google: tus datos de HandyAlliance están seguros.",
+        reconnect_required:
+          "Tu conexión con Google expiró o fue eliminada. Vuelve a conectar Google: tus datos de HandyAlliance están seguros.",
+      },
+    },
     jobs: {
       views: {
         all_jobs: "Todos los trabajos",
