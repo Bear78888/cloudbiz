@@ -443,6 +443,91 @@ begin
   end loop;
 
   perform pg_temp.act_as_postgres();
+
+  -- 15. The Data API privilege matrix is exactly what 20260804000900 says.
+  --
+  -- Check 14 proves anon reads nothing; it cannot prove anon was not *granted*
+  -- anything, because forced RLS hides an over-grant behind an empty result.
+  -- That is precisely how the live project sat for a while: created back when
+  -- Supabase auto-exposed everything, its default ACL handed anon full DML
+  -- plus TRUNCATE on every table, and TRUNCATE answers to no policy. So this
+  -- check reads the grants themselves.
+  if exists (
+    select 1 from information_schema.role_table_grants
+    where table_schema = 'public' and grantee = 'anon'
+  ) then
+    raise exception 'FAIL(15a): anon holds table privileges in public: %',
+      (select string_agg(distinct table_name || '=' || privilege_type, ', ')
+         from information_schema.role_table_grants
+        where table_schema = 'public' and grantee = 'anon');
+  end if;
+
+  -- authenticated gets a verb only where a policy backs it. Anything else is
+  -- either a grant nobody meant to write or a policy nobody meant to drop —
+  -- both worth failing on. DELETE on organization_members is the one verb that
+  -- is granted and policied; there is no DELETE anywhere else, because removal
+  -- is `deleted_at` (§14.12).
+  if exists (
+    select 1
+      from information_schema.role_table_grants g
+     where g.table_schema = 'public'
+       and g.grantee = 'authenticated'
+       and g.privilege_type in ('SELECT', 'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER')
+       and not exists (
+         select 1 from pg_policies p
+          where p.schemaname = 'public'
+            and p.tablename = g.table_name
+            and p.cmd = case g.privilege_type when 'INSERT' then 'INSERT'
+                                              when 'UPDATE' then 'UPDATE'
+                                              when 'DELETE' then 'DELETE'
+                                              else 'SELECT' end
+       )
+  ) then
+    raise exception 'FAIL(15b): authenticated holds a privilege with no matching policy: %',
+      (select string_agg(distinct g.table_name || '=' || g.privilege_type, ', ')
+         from information_schema.role_table_grants g
+        where g.table_schema = 'public'
+          and g.grantee = 'authenticated'
+          and g.privilege_type in ('SELECT', 'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER')
+          and not exists (
+            select 1 from pg_policies p
+             where p.schemaname = 'public'
+               and p.tablename = g.table_name
+               and p.cmd = case g.privilege_type when 'INSERT' then 'INSERT'
+                                                 when 'UPDATE' then 'UPDATE'
+                                                 when 'DELETE' then 'DELETE'
+                                                 else 'SELECT' end
+          ));
+  end if;
+
+  -- And the inverse: a policy with no grant behind it is the failure that sent
+  -- every query to "permission denied for table organization_members" and a
+  -- user with an organization back to onboarding, forever (§14a).
+  if exists (
+    select 1
+      from (select distinct tablename, cmd from pg_policies where schemaname = 'public') p
+     where p.cmd in ('SELECT', 'INSERT', 'UPDATE', 'DELETE')
+       and not exists (
+         select 1 from information_schema.role_table_grants g
+          where g.table_schema = 'public'
+            and g.grantee = 'authenticated'
+            and g.table_name = p.tablename
+            and g.privilege_type = p.cmd
+       )
+  ) then
+    raise exception 'FAIL(15c): a policy has no grant behind it: %',
+      (select string_agg(p.tablename || '=' || p.cmd, ', ')
+         from (select distinct tablename, cmd from pg_policies where schemaname = 'public') p
+        where p.cmd in ('SELECT', 'INSERT', 'UPDATE', 'DELETE')
+          and not exists (
+            select 1 from information_schema.role_table_grants g
+             where g.table_schema = 'public'
+               and g.grantee = 'authenticated'
+               and g.table_name = p.tablename
+               and g.privilege_type = p.cmd
+          ));
+  end if;
+
   raise notice 'RLS isolation tests passed';
 end;
 $$;
