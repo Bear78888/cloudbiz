@@ -100,3 +100,9 @@ export const TRADES: TradeConfig[] = [
  * reachable for review either way.
  */
 export const SPANISH_CONTENT_PUBLISHED = true;
+
+/**
+ * Google OAuth sign-in flag (§10.1, audit §4.3: behind a flag until the
+ * owner's Google Cloud project + verified consent screen exist, §00.3).
+ */
+export const GOOGLE_AUTH_ENABLED = false;

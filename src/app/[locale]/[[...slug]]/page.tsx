@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { AuthPage } from "@/components/auth-page";
 import { HomePage } from "@/components/home";
+import { checkServerEnvironment } from "@/lib/env/server";
 import {
   JobTrackerPage,
   PricingPage,
@@ -124,8 +126,16 @@ export default async function Page({ params }: { params: Promise<PageParams> }) 
     case "trade":
       return <TradePage locale={l} dict={dict} trade={entry.trade} />;
     case "signIn":
-      return <SignInPage locale={l} dict={dict} />;
-    case "signUp":
-      return <SignUpPage locale={l} dict={dict} />;
+    case "signUp": {
+      // Functional auth once Supabase is configured; static preview until then.
+      if (checkServerEnvironment("browser").ok) {
+        return <AuthPage locale={l} dict={dict} mode={entry.kind} />;
+      }
+      return entry.kind === "signIn" ? (
+        <SignInPage locale={l} dict={dict} />
+      ) : (
+        <SignUpPage locale={l} dict={dict} />
+      );
+    }
   }
 }
