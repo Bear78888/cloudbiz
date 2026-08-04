@@ -37,8 +37,11 @@ as $$
 $$;
 
 grant usage on schema public to anon, authenticated, service_role;
-alter default privileges in schema public
-  grant select, insert, update, delete on tables to anon, authenticated, service_role;
+
+-- Deliberately NO default table grants. Supabase's current cloud default is to
+-- leave new tables unexposed, so the migrations must grant explicitly
+-- (20260804000800). Auto-granting here would hide a missing grant until it
+-- surfaced in a browser.
 
 -- Supabase grants EXECUTE on every new function directly to these roles, and
 -- a `revoke ... from public` does not remove a direct grant. Reproducing that

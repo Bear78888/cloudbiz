@@ -50,3 +50,25 @@ npm run typecheck   # also validates EN/ES dictionary key parity via types
 npm test            # unit tests (entitlements, webhook core, env schema, i18n parity)
 npm run build
 ```
+
+## End-to-end tests
+
+Playwright drives a real browser against a real Next.js server and a real
+Supabase — no stubs, so RLS, the auth server and the activity triggers are all
+in the loop. Needs Docker for the local Supabase stack:
+
+```bash
+npx supabase start          # Postgres + API + auth, migrations applied
+eval "$(npx supabase status -o env)"
+export NEXT_PUBLIC_SUPABASE_URL="$API_URL" \
+       NEXT_PUBLIC_SUPABASE_ANON_KEY="$ANON_KEY" \
+       SUPABASE_SERVICE_ROLE_KEY="$SERVICE_ROLE_KEY" \
+       SUPABASE_PROJECT_REF=whwzfdkdxyycsvyvyxdn
+npm run build
+npm run test:e2e            # or: npm run test:e2e:ui
+```
+
+`E2E_BASE_URL=https://…` points the suite at an already-deployed preview
+instead of starting a local server. CI runs the same sequence in the `e2e`
+job; the local stack's keys are fixed development values, so no secrets are
+involved.

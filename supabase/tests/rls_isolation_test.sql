@@ -37,6 +37,7 @@ declare
   job_a uuid;
   job_b uuid;
   import_result jsonb;
+  relation_name text;
 begin
   -- User A creates an organization through the RPC.
   perform pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
@@ -420,25 +421,26 @@ begin
     raise exception 'FAIL(13d): activity history of deleted organization B was lost';
   end if;
 
-  -- 14. Unauthenticated (anon) sees nothing.
+  -- 14. Unauthenticated (anon) reads nothing. Since 20260804000800 the API
+  -- roles are granted explicitly and anon is granted nothing at all, so a read
+  -- is refused outright rather than returning an empty set. Either outcome
+  -- means the same thing here, and the stricter one must not fail the test.
   perform set_config('request.jwt.claim.sub', '', true);
   perform set_config('role', 'anon', true);
-  select count(*) into visible_count from public.organizations;
-  if visible_count <> 0 then
-    raise exception 'FAIL(14a): anon sees % organizations', visible_count;
-  end if;
-  select count(*) into visible_count from public.jobs;
-  if visible_count <> 0 then
-    raise exception 'FAIL(14b): anon sees % jobs', visible_count;
-  end if;
-  select count(*) into visible_count from public.customers;
-  if visible_count <> 0 then
-    raise exception 'FAIL(14c): anon sees % customers', visible_count;
-  end if;
-  select count(*) into visible_count from public.job_activities;
-  if visible_count <> 0 then
-    raise exception 'FAIL(14d): anon sees % job activities', visible_count;
-  end if;
+  foreach relation_name in array array['organizations', 'jobs', 'customers', 'job_activities']
+  loop
+    begin
+      execute format('select count(*) from public.%I', relation_name) into visible_count;
+      if visible_count <> 0 then
+        raise exception 'FAIL(14): anon sees % rows in %', visible_count, relation_name;
+      end if;
+    exception
+      when insufficient_privilege then null; -- refused outright: even better
+      when others then
+        if sqlerrm like 'FAIL(14)%' then raise; end if;
+        raise;
+    end;
+  end loop;
 
   perform pg_temp.act_as_postgres();
   raise notice 'RLS isolation tests passed';
