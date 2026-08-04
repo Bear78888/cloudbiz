@@ -1,6 +1,13 @@
 import { expect, test } from "@playwright/test";
 
-import { createJob, createOrganization, formWith, signUp, uniqueEmail } from "./helpers";
+import {
+  createJob,
+  createOrganization,
+  formWith,
+  signUp,
+  uniqueEmail,
+  visibleText,
+} from "./helpers";
 
 /**
  * The scenario that matters most (§37.3 A): sign up → set up the company →
@@ -32,9 +39,9 @@ test("sign up, create the company, add a job, change its status", async ({ page 
   });
 
   await expect(page.getByRole("heading", { name: "Faucet replacement" })).toBeVisible();
-  await expect(page.getByText("John Smith").first()).toBeVisible();
-  await expect(page.getByText("Estimate Sent").first()).toBeVisible();
-  await expect(page.getByText("$280.00").first()).toBeVisible();
+  await expect(visibleText(page, "John Smith")).toBeVisible();
+  await expect(visibleText(page, "Estimate Sent")).toBeVisible();
+  await expect(visibleText(page, "$280.00")).toBeVisible();
   // The schedule is shown in the organization's time zone, not the server's.
   await expect(page.getByText(/2:00\s?PM/).first()).toBeVisible();
   // §13.11: the change is in the job's history.
@@ -49,7 +56,7 @@ test("sign up, create the company, add a job, change its status", async ({ page 
 
   // The list reflects it, and the view it belongs to lists it.
   await page.goto("/en/app/jobs?view=scheduled");
-  await expect(page.getByText("Faucet replacement").first()).toBeVisible();
+  await expect(visibleText(page, "Faucet replacement")).toBeVisible();
   await page.goto("/en/app/jobs?view=lost");
   await expect(page.getByText("Faucet replacement")).toHaveCount(0);
 
@@ -65,7 +72,7 @@ test("search, bulk status change, soft delete and restore", async ({ page }) => 
 
   // Search finds a customer by a phone typed in a different format than stored.
   await page.goto("/en/app/jobs?q=310-555-0303");
-  await expect(page.getByText("AC tune-up").first()).toBeVisible();
+  await expect(visibleText(page, "AC tune-up")).toBeVisible();
   await expect(page.getByText("Deep clean")).toHaveCount(0);
 
   // A search that matches nothing says so, rather than looking broken (§29).
@@ -84,8 +91,8 @@ test("search, bulk status change, soft delete and restore", async ({ page }) => 
   await page.waitForURL(/\/en\/app\/jobs/);
 
   await page.goto("/en/app/jobs?view=completed");
-  await expect(page.getByText("AC tune-up").first()).toBeVisible();
-  await expect(page.getByText("Deep clean").first()).toBeVisible();
+  await expect(visibleText(page, "AC tune-up")).toBeVisible();
+  await expect(visibleText(page, "Deep clean")).toBeVisible();
 
   // Soft delete keeps the row and its history (§14.12).
   await page.goto("/en/app/jobs");
@@ -97,7 +104,9 @@ test("search, bulk status change, soft delete and restore", async ({ page }) => 
 
   // The deleted job is listed under the Deleted filter and nowhere else.
   await page.goto("/en/app/jobs?deleted=1");
-  await expect(page.getByText("Deleted", { exact: true }).first()).toBeVisible();
+  await expect(
+    page.getByText("Deleted", { exact: true }).filter({ visible: true }).first(),
+  ).toBeVisible();
   // The bulk bar is not offered here: a deleted job is restored, not restatused.
   await expect(page.locator("#bulk-status")).toHaveCount(0);
 

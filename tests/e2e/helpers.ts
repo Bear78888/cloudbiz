@@ -45,6 +45,18 @@ export async function createOrganization(page: Page, name: string): Promise<void
   await expect(page.getByRole("heading", { name: /Dashboard/i })).toBeVisible();
 }
 
+/**
+ * The first *visible* node with this text.
+ *
+ * Two things on these pages make a bare `.first()` unreliable: the list
+ * renders both layouts and hides one with CSS (§13.9), and the bulk status
+ * form contains an <option> for every status name. Both are legitimately in
+ * the DOM and neither is on screen, so assertions must say which they mean.
+ */
+export function visibleText(page: Page, text: string) {
+  return page.getByText(text).filter({ visible: true }).first();
+}
+
 export interface JobInput {
   customer: string;
   phone?: string;
