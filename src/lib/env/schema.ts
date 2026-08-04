@@ -1,5 +1,9 @@
 import { z } from "zod";
 
+// Relative import: this module is loaded by next.config.ts, where the "@"
+// path alias is not available.
+import { resolveExpectedSupabaseProjectRef } from "../supabase/target";
+
 /**
  * Layered environment validation (spec §33; pattern per audit §4.2):
  * browser ⊂ platform ⊂ integrations. Key prefixes are checked so a value
@@ -143,8 +147,27 @@ const integrationEnvironmentObject = platformEnvironmentObject.extend({
   CRON_SECRET: z.string().min(16).optional(),
 });
 
-export const platformEnvironmentSchema = platformEnvironmentObject;
-export const integrationEnvironmentSchema = integrationEnvironmentObject.superRefine(refineStripeMode);
+// The server-owned ref must match the canonical platform project (or a
+// registered preview target) — a deployment pointed at any other project,
+// including BizMetria, fails the build (audit §4.2).
+function refineSupabaseProjectRef(
+  value: { SUPABASE_PROJECT_REF: string; SUPABASE_TARGET_ENV?: "preview" | undefined },
+  context: z.RefinementCtx,
+): void {
+  const expectedRef = resolveExpectedSupabaseProjectRef(value);
+  if (value.SUPABASE_PROJECT_REF !== expectedRef) {
+    context.addIssue({
+      code: "custom",
+      path: ["SUPABASE_PROJECT_REF"],
+      message: `SUPABASE_PROJECT_REF must be ${expectedRef}`,
+    });
+  }
+}
+
+export const platformEnvironmentSchema = platformEnvironmentObject.superRefine(refineSupabaseProjectRef);
+export const integrationEnvironmentSchema = integrationEnvironmentObject
+  .superRefine(refineStripeMode)
+  .superRefine(refineSupabaseProjectRef);
 
 export type BrowserEnvironment = z.infer<typeof browserEnvironmentSchema>;
 export type PlatformEnvironment = z.infer<typeof platformEnvironmentSchema>;

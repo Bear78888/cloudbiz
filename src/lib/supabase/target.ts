@@ -4,14 +4,12 @@
  * never from NEXT_PUBLIC_SUPABASE_URL, which a Vercel Marketplace
  * integration can overwrite with another project's credentials.
  *
- * TODO(owner): once the dedicated HandyAlliance Supabase project exists
- * (§00.0.5 — awaited from the owner; it must NOT be a BizMetria project),
- * pin its ref in CANONICAL_SUPABASE_PROJECT_REF. Until then the guard runs
- * in bootstrap mode: it accepts the server-owned SUPABASE_PROJECT_REF but
- * still refuses any mismatch with the public URL, and refuses the known
- * BizMetria refs outright so platform code can never write to that product.
+ * The canonical platform project `handyalliance-platform` was created
+ * 2026-08-04 with the owner's permission; its ref is pinned below. The
+ * known BizMetria refs are refused outright so platform code can never
+ * write to that product (§00.0.1.4).
  */
-export const CANONICAL_SUPABASE_PROJECT_REF: string | null = null;
+export const CANONICAL_SUPABASE_PROJECT_REF: string | null = "whwzfdkdxyycsvyvyxdn";
 
 /** BizMetria projects are read-only reference material (§00.0.1.4) — never a platform target. */
 export const FORBIDDEN_PROJECT_REFS: readonly string[] = Object.freeze([

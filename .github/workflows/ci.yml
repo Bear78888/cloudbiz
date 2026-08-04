@@ -25,9 +25,11 @@ jobs:
       - name: Build (platform mode, synthetic env)
         run: npm run build
         env:
-          NEXT_PUBLIC_SUPABASE_URL: https://abcdefghijkl.supabase.co
+          # The canonical project ref is pinned in src/lib/supabase/target.ts;
+          # it is public (part of the project URL), the keys stay synthetic.
+          NEXT_PUBLIC_SUPABASE_URL: https://whwzfdkdxyycsvyvyxdn.supabase.co
           NEXT_PUBLIC_SUPABASE_ANON_KEY: synthetic-anon-key
-          SUPABASE_PROJECT_REF: abcdefghijkl
+          SUPABASE_PROJECT_REF: whwzfdkdxyycsvyvyxdn
           SUPABASE_SERVICE_ROLE_KEY: synthetic-service-key
 
   rls:

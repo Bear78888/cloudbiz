@@ -1,15 +1,18 @@
 import { describe, expect, it } from "vitest";
 
 import { validateEnvironment } from "@/lib/env/schema";
+import { CANONICAL_SUPABASE_PROJECT_REF } from "@/lib/supabase/target";
+
+const canonicalRef = CANONICAL_SUPABASE_PROJECT_REF ?? "abcdefghijkl";
 
 const validBrowser = {
-  NEXT_PUBLIC_SUPABASE_URL: "https://abcdefghijkl.supabase.co",
+  NEXT_PUBLIC_SUPABASE_URL: `https://${canonicalRef}.supabase.co`,
   NEXT_PUBLIC_SUPABASE_ANON_KEY: "anon-key-value",
 };
 
 const validPlatform = {
   ...validBrowser,
-  SUPABASE_PROJECT_REF: "abcdefghijkl",
+  SUPABASE_PROJECT_REF: canonicalRef,
   SUPABASE_SERVICE_ROLE_KEY: "service-role-key",
 };
 
@@ -23,6 +26,17 @@ describe("validateEnvironment", () => {
     expect(check.ok).toBe(false);
     expect(check.missing).toContain("NEXT_PUBLIC_SUPABASE_URL");
     expect(check.missing).toContain("SUPABASE_SERVICE_ROLE_KEY");
+  });
+
+  it("rejects a foreign project ref — including BizMetria's", () => {
+    for (const foreignRef of ["rbndiytodvoyiejassnw", "someone-elses-project"]) {
+      const check = validateEnvironment(
+        { ...validPlatform, SUPABASE_PROJECT_REF: foreignRef },
+        "platform",
+      );
+      expect(check.ok).toBe(false);
+      expect(check.invalid).toContain("SUPABASE_PROJECT_REF");
+    }
   });
 
   it("rejects a Supabase URL with a path", () => {
