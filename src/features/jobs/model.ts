@@ -232,6 +232,89 @@ export function customerMatchKey(input: {
 }
 
 // ---------------------------------------------------------------------------
+// Dashboard counters (§20.2)
+// ---------------------------------------------------------------------------
+
+export interface JobCounters {
+  newLeads: number;
+  estimatesWaiting: number;
+  jobsThisWeek: number;
+  unpaidJobs: number;
+}
+
+/**
+ * The four Job-Tracker-backed dashboard cards, derived with the same view
+ * predicates the list uses so a card and its view can never disagree.
+ * "This week" is the next seven days of scheduled work — the window a pro
+ * actually plans against, not a calendar week that empties every Sunday.
+ */
+export function countForDashboard(
+  jobs: readonly {
+    status: JobStatus;
+    payment_status: PaymentStatus;
+    scheduled_start: string | null;
+  }[],
+  now: Date,
+): JobCounters {
+  const weekEnd = now.getTime() + 7 * 24 * 60 * 60 * 1000;
+
+  let newLeads = 0;
+  let estimatesWaiting = 0;
+  let jobsThisWeek = 0;
+  let unpaidJobs = 0;
+
+  for (const job of jobs) {
+    if (matchesView(job, "new_leads")) newLeads += 1;
+    if (job.status === "estimate_draft" || job.status === "estimate_sent") estimatesWaiting += 1;
+    if (matchesView(job, "unpaid")) unpaidJobs += 1;
+
+    if (job.scheduled_start && !isClosed(job.status)) {
+      const at = new Date(job.scheduled_start).getTime();
+      if (Number.isFinite(at) && at >= now.getTime() && at <= weekEnd) jobsThisWeek += 1;
+    }
+  }
+
+  return { newLeads, estimatesWaiting, jobsThisWeek, unpaidJobs };
+}
+
+// ---------------------------------------------------------------------------
+// Search (§13.8)
+// ---------------------------------------------------------------------------
+
+export const MAX_SEARCH_LENGTH = 100;
+
+/**
+ * Wraps a search term in wildcards and escapes the ones the user typed, so
+ * searching for `50%` finds the literal string rather than everything.
+ */
+export function likePattern(term: string): string {
+  const escaped = term.trim().slice(0, MAX_SEARCH_LENGTH).replace(/[\\%_]/g, (c) => `\\${c}`);
+  return `%${escaped}%`;
+}
+
+/**
+ * Quotes a value for a PostgREST filter string. Without this, a customer named
+ * `Smith, John` or a search for `a)` would be read as filter syntax instead of
+ * as text.
+ */
+export function quoteFilterValue(value: string): string {
+  return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
+
+/** Columns of `jobs` a free-text search looks at. */
+export const JOB_SEARCH_COLUMNS = ["title", "service", "description", "address", "notes"] as const;
+
+/** `or=(...)` argument matching any searchable job column, plus known customers. */
+export function buildJobSearchFilter(term: string, customerIds: readonly string[]): string {
+  const pattern = quoteFilterValue(likePattern(term));
+  const clauses: string[] = JOB_SEARCH_COLUMNS.map((column) => `${column}.ilike.${pattern}`);
+  if (customerIds.length > 0) {
+    clauses.push(`customer_id.in.(${customerIds.join(",")})`);
+  }
+  return clauses.join(",");
+}
+
+// ---------------------------------------------------------------------------
 // Money & dates
 // ---------------------------------------------------------------------------
 

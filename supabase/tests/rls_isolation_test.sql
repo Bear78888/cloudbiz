@@ -172,6 +172,20 @@ begin
     raise exception 'FAIL(9b): customer.created activity was not recorded';
   end if;
 
+  -- Phone search survives formatting (§13.8): the generated digits column
+  -- makes every way of writing the number the same string.
+  if not exists (
+    select 1 from public.customers where id = customer_a and phone_digits = '13105550101'
+  ) then
+    raise exception 'FAIL(9b2): phone_digits was not generated from the stored phone';
+  end if;
+  if not exists (
+    select 1 from public.customers
+    where organization_id = org_a and phone_digits like '%' || '3105550101'
+  ) then
+    raise exception 'FAIL(9b3): a differently formatted phone does not match the stored one';
+  end if;
+
   -- A status change and a soft delete each get their own event (§13.11, §14.12).
   update public.jobs set status = 'estimate_sent' where id = job_a;
   if not exists (

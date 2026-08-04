@@ -51,6 +51,9 @@ export default async function AppLayout({
             <Link href={`/${l}/app`} className="hover:text-slate-900">
               {d.navDashboard}
             </Link>
+            <Link href={`/${l}/app/jobs`} className="hover:text-slate-900">
+              {dict.platform.jobs.nav}
+            </Link>
             {membership.role === "owner" ? (
               <Link href={`/${l}/app/billing`} className="hover:text-slate-900">
                 {d.navBilling}
