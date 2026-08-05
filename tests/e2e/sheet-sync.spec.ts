@@ -58,8 +58,13 @@ test.describe.configure({ mode: "serial" });
 test("every event reported as synced has a row in the sheet", async ({ page }) => {
   test.skip(!ENCRYPTION_KEY || !CRON_SECRET, "sync stub environment is not configured");
 
+  // A unique name per run. A constant one means a retry creates a second
+  // organization with the same name and the lookup below breaks on two rows —
+  // the very "one run's leftovers are another run's mystery failure" that the
+  // comment in helpers.ts warns about, which I then wrote anyway.
+  const organizationName = `E2E Sync ${Date.now().toString(36)}`;
   await signUp(page, uniqueEmail("e2e-sync"));
-  await createOrganization(page, "E2E Sync Plumbing");
+  await createOrganization(page, organizationName);
   await createJob(page, {
     customer: "Sheet Check Customer",
     phone: "(310) 555-0188",
@@ -68,12 +73,15 @@ test("every event reported as synced has a row in the sheet", async ({ page }) =
   });
 
   const supabase = admin();
-  const { data: organization } = await supabase
+  const { data: organizations, error: lookupError } = await supabase
     .from("organizations")
     .select("id")
-    .eq("name", "E2E Sync Plumbing")
-    .single();
-  const organizationId = organization!.id as string;
+    .eq("name", organizationName);
+  // Say what went wrong rather than dying on a null dereference three lines
+  // later: the failure this replaces reported a column number, not a cause.
+  expect(lookupError?.message ?? null).toBeNull();
+  expect(organizations, `no organization named ${organizationName}`).toHaveLength(1);
+  const organizationId = organizations![0].id as string;
 
   // Connect Google without going through the consent screen: the OAuth leg is
   // covered elsewhere and cannot run headless anyway (the consent screen only
@@ -109,7 +117,7 @@ test("every event reported as synced has a row in the sheet", async ({ page }) =
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      properties: { title: "HandyAlliance — E2E Sync Plumbing" },
+      properties: { title: `HandyAlliance — ${organizationName}` },
       sheets: [
         header("Jobs", "HandyAlliance Job ID"),
         header("Customers", "Customer ID"),
@@ -123,7 +131,7 @@ test("every event reported as synced has a row in the sheet", async ({ page }) =
     organization_id: organizationId,
     connection_id: connection!.id as string,
     spreadsheet_id: created.spreadsheetId,
-    spreadsheet_name: "HandyAlliance — E2E Sync Plumbing",
+    spreadsheet_name: `HandyAlliance — ${organizationName}`,
     tab_mapping: { Jobs: 0, Customers: 1, "Read Me": 2 },
     status: "active",
   });
