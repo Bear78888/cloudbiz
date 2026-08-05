@@ -25,7 +25,15 @@ import { MAX_ATTEMPTS, backoffMs, eventOutcome, planWrites, rowRange } from "./s
  * session, and `sync_outbox` is not writable by any client role.
  */
 
-const SHEETS_API = "https://sheets.googleapis.com/v4/spreadsheets";
+/**
+ * Base URL of the Sheets API. Overridable so CI can point the worker at a stub
+ * and assert the invariant that matters: the number of events marked `synced`
+ * equals the number of rows the sheet actually accepted. Today's defect —
+ * "synced" with nothing written — passed every green test precisely because
+ * nobody compared those two numbers.
+ */
+const SHEETS_API =
+  process.env.GOOGLE_SHEETS_API_BASE ?? "https://sheets.googleapis.com/v4/spreadsheets";
 
 /** How many events one run takes. Bounded so a backlog cannot stall a request. */
 const BATCH_SIZE = 200;

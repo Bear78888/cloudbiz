@@ -27,7 +27,8 @@ export const GOOGLE_SCOPES = [
 ] as const;
 
 const AUTH_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth";
-const TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
+/** Overridable for the same reason as the Sheets base: see worker.ts. */
+const TOKEN_ENDPOINT = process.env.GOOGLE_OAUTH_TOKEN_URL ?? "https://oauth2.googleapis.com/token";
 
 export interface AuthUrlInput {
   clientId: string;

@@ -208,6 +208,31 @@ jobs:
             echo "NEXT_PUBLIC_APP_URL=http://127.0.0.1:3100"
           } >> "$GITHUB_ENV"
 
+      # The stub stands in for Google so the run can assert that every event
+      # marked `synced` produced a row. It is started before the build so the
+      # app picks up the overridden endpoints from the environment.
+      - name: Start the Sheets stub
+        run: |
+          node tests/e2e/sheets-stub.mjs &
+          for _ in $(seq 1 20); do
+            curl -sf http://127.0.0.1:4545/token > /dev/null && break
+            sleep 0.5
+          done
+          curl -sf http://127.0.0.1:4545/token > /dev/null
+
+      - name: Point Google at the stub
+        run: |
+          {
+            echo "GOOGLE_SHEETS_API_BASE=http://127.0.0.1:4545/v4/spreadsheets"
+            echo "GOOGLE_OAUTH_TOKEN_URL=http://127.0.0.1:4545/token"
+            echo "GOOGLE_CLIENT_ID=stub-client-id"
+            echo "GOOGLE_CLIENT_SECRET=stub-client-secret"
+            # Fixed, non-secret: it only has to decrypt what this run encrypted.
+            echo "GOOGLE_TOKEN_ENCRYPTION_KEY=aGFuZHlhbGxpYW5jZS1jaS1zdHViLWtleS0wMDAwMDA="
+            echo "CRON_SECRET=stub-cron-secret"
+            echo "SHEETS_STUB_STATE=/tmp/sheets-stub.json"
+          } >> "$GITHUB_ENV"
+
       - name: Build
         run: npm run build
 
