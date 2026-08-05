@@ -268,6 +268,7 @@ export type Database = {
           status: string;
           subtotal: number;
           tax: number;
+          tax_rate: number;
           total: number;
           title: string;
           scope: string | null;
@@ -293,6 +294,7 @@ export type Database = {
           status?: string;
           subtotal?: number;
           tax?: number;
+          tax_rate?: number;
           total?: number;
           title: string;
           scope?: string | null;
@@ -318,6 +320,7 @@ export type Database = {
           status?: string;
           subtotal?: number;
           tax?: number;
+          tax_rate?: number;
           total?: number;
           title?: string;
           scope?: string | null;

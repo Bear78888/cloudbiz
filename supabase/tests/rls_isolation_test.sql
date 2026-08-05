@@ -722,6 +722,51 @@ begin
     raise exception 'FAIL(18e): an estimate line could not be removed';
   end if;
 
+  -- 18f. The tax rate is a fraction. `8.25` entered where `0.0825` was meant
+  -- multiplies the invoice by a hundred, so the column refuses it rather than
+  -- relying on the form having validated first.
+  mutation_blocked := false;
+  begin
+    update public.estimates set tax_rate = 8.25 where id = estimate_a;
+  exception when check_violation then
+    mutation_blocked := true;
+  end;
+  if not mutation_blocked then
+    raise exception 'FAIL(18f): a tax rate of 825%% was accepted';
+  end if;
+
+  update public.estimates set tax_rate = 0.0825 where id = estimate_a;
+  if not exists (select 1 from public.estimates where id = estimate_a and tax_rate = 0.0825) then
+    raise exception 'FAIL(18g): a real tax rate was rejected';
+  end if;
+
+  -- 18h. A status the customer can see requires a link they can open. Without
+  -- this an estimate could be marked sent with no token, and "sent" would name
+  -- something that never reached anyone.
+  mutation_blocked := false;
+  begin
+    update public.estimates set status = 'sent' where id = estimate_a;
+  exception when check_violation then
+    mutation_blocked := true;
+  end;
+  if not mutation_blocked then
+    raise exception 'FAIL(18h): an estimate was marked sent with no public token';
+  end if;
+
+  -- 18i. And "accepted" has to have a date on it — §16.11 writes the amount to
+  -- the job on the strength of that word.
+  mutation_blocked := false;
+  begin
+    update public.estimates
+      set status = 'accepted', public_token = 'test-token-18i'
+      where id = estimate_a;
+  exception when check_violation then
+    mutation_blocked := true;
+  end;
+  if not mutation_blocked then
+    raise exception 'FAIL(18i): an estimate was accepted with no accepted_at';
+  end if;
+
   perform pg_temp.act_as_postgres();
   raise notice 'RLS isolation tests passed';
 end;
