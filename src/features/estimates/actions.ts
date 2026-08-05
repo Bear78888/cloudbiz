@@ -14,6 +14,7 @@ import { isEstimateStatus, type EstimateStatus } from "./model";
 import { MAX_LINE_ITEMS, parseEstimateForm, type RawLineItem } from "./schema";
 import { createEstimateForJob, saveEstimateDraft, setEstimateStatus } from "./service";
 import { sendEstimateToCustomer } from "./send";
+import { generateEstimateDraft } from "./generate";
 
 /**
  * Server actions for the Estimate Maker (§16).
@@ -208,4 +209,42 @@ export async function sendEstimateAction(formData: FormData): Promise<void> {
 
   const target = `/${locale}/app/jobs/${jobId}/estimates/${estimateId}`;
   redirect(result.ok ? `${target}?sent=1` : `${target}?blocked=${result.error}`);
+}
+
+/**
+ * Drafts the estimate with the model (§16.2–16.4).
+ *
+ * The description is untrusted (§27.3) and is treated as data all the way
+ * down; nothing here inspects or filters it. What keeps that safe is that the
+ * result lands in a draft and §16.5 still needs a person.
+ */
+export async function generateEstimateAction(formData: FormData): Promise<void> {
+  const locale = localeFrom(formData);
+  const jobId = String(formData.get("job_id") ?? "").trim();
+  const estimateId = String(formData.get("estimate_id") ?? "").trim();
+  const description = String(formData.get("description") ?? "");
+  const taxRate = Number(formData.get("tax_rate") ?? 0);
+
+  const { supabase, membership } = await requireContext();
+  if (!membership) redirect(`/${locale}/onboarding`);
+  if (!estimateId) redirect(`/${locale}/app/jobs`);
+
+  const result = await generateEstimateDraft(supabase, membership.organizationId, estimateId, {
+    description,
+    trade: membership.trade,
+    taxRate: Number.isFinite(taxRate) && taxRate >= 0 && taxRate <= 0.5 ? taxRate : 0,
+  });
+
+  if (result.ok) {
+    trackServerEvent("estimate_ai_drafted", {
+      organization_id: membership.organizationId,
+      band: result.band,
+      items: result.itemCount,
+    });
+  }
+
+  revalidatePath(`/${locale}/app/jobs/${jobId}/estimates/${estimateId}`);
+
+  const target = `/${locale}/app/jobs/${jobId}/estimates/${estimateId}`;
+  redirect(result.ok ? `${target}?drafted=1` : `${target}?blocked=${result.error}`);
 }

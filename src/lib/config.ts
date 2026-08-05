@@ -71,6 +71,20 @@ export const PRICING = {
 /** Default usage limits (spec §6.1a) — shown before purchase (§6.2.10). */
 export const LIMITS = {
   call_answering: { includedMinutes: 100, overagePerMinute: 0.35 },
+  /**
+   * Estimates are unlimited; *drafts written by the model* are not.
+   *
+   * The marketing promise is "unlimited estimates", and it stays true — an
+   * owner can write as many as they like, by hand, forever. What has a ceiling
+   * is calls to the model, because a $15/month tool with uncapped inference is
+   * a hole in the unit economics that only shows up when the bill arrives.
+   * Closing it before the first customer costs a sentence in the interface;
+   * closing it afterwards costs a price change.
+   *
+   * 50 a day is far above what a one-person trade does — a busy pro quotes a
+   * handful of jobs a day — and far below what a loop or a scraper does.
+   */
+  estimate_quote_maker: { aiDraftsPerDay: 50 },
   reviews_followups: { includedSms: 200 },
   bad_lead_refund_helper: { includedAnalyses: 10 },
   business_website: { sitesPerOrganization: 1 },

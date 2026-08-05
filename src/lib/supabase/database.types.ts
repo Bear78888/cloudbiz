@@ -282,6 +282,11 @@ export type Database = {
           accepted_at: string | null;
           rejected_at: string | null;
           expires_at: string | null;
+          ai_model: string | null;
+          ai_prompt_version: string | null;
+          ai_schema_version: string | null;
+          ai_confidence: number | null;
+          ai_generated_at: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -308,6 +313,11 @@ export type Database = {
           accepted_at?: string | null;
           rejected_at?: string | null;
           expires_at?: string | null;
+          ai_model?: string | null;
+          ai_prompt_version?: string | null;
+          ai_schema_version?: string | null;
+          ai_confidence?: number | null;
+          ai_generated_at?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -334,6 +344,11 @@ export type Database = {
           accepted_at?: string | null;
           rejected_at?: string | null;
           expires_at?: string | null;
+          ai_model?: string | null;
+          ai_prompt_version?: string | null;
+          ai_schema_version?: string | null;
+          ai_confidence?: number | null;
+          ai_generated_at?: string | null;
           created_at?: string;
           updated_at?: string;
         };
