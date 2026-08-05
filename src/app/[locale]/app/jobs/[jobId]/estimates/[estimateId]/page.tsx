@@ -7,6 +7,7 @@ import { EstimateEditor } from "@/features/estimates/EstimateEditor";
 import { isEditable, isReleased } from "@/features/estimates/model";
 import { getEstimate } from "@/features/estimates/service";
 import { getCurrentMembership } from "@/features/organizations/service";
+import { resolveAppUrl } from "@/lib/app-url";
 import { formatDate, formatMoney } from "@/lib/datetime";
 import { fmt, getDict, type Dict } from "@/lib/i18n";
 import { isLocale, type Locale } from "@/lib/routes";
@@ -64,6 +65,18 @@ function StatusButton({
   );
 }
 
+/**
+ * The address to hand a customer.
+ *
+ * Falls back to a relative path when the deployment address is unknown rather
+ * than to a hardcoded domain: a wrong absolute link is worse than a short one
+ * the owner has to prefix, because it silently points somewhere real.
+ */
+function customerLink(locale: Locale, token: string, appUrl: string | null): string {
+  const path = `/e/${locale}/${token}`;
+  return appUrl ? `${appUrl.replace(/\/$/, "")}${path}` : path;
+}
+
 function blockerMessage(dict: Dict, code: string | undefined): string | null {
   if (!code) return null;
   const blockers = dict.platform.estimates.blockers;
@@ -118,6 +131,7 @@ export default async function EstimatePage({
   const tz = membership.timezone;
   const currency = membership.currency;
   const released = isReleased(estimate.status);
+  const appUrl = resolveAppUrl();
   const answered = estimate.status === "accepted" || estimate.status === "rejected";
 
   return (
@@ -227,6 +241,32 @@ export default async function EstimatePage({
                 : e.approveHint}
         </p>
       </section>
+
+      {/* The link, once there is one. Shown only here, on a page behind the
+          session — the token is a bearer credential, so the owner's screen is
+          the one place it belongs. */}
+      {estimate.publicToken ? (
+        <section className="rounded-2xl border border-slate-200 bg-white p-5">
+          <h2 className="text-sm font-bold uppercase tracking-wide text-slate-500">
+            {e.linkSection}
+          </h2>
+          <p className="mt-2 text-sm text-slate-600">{e.linkHint}</p>
+          <label htmlFor="customer-link" className="sr-only">
+            {e.linkSection}
+          </label>
+          <input
+            id="customer-link"
+            readOnly
+            value={customerLink(estimate.locale, estimate.publicToken, appUrl)}
+            className="mt-3 w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 font-mono text-sm text-slate-800"
+          />
+          {estimate.expiresAt ? (
+            <p className="mt-2 text-xs text-slate-500">
+              {e.linkExpires} {formatDate(estimate.expiresAt, l, tz)}
+            </p>
+          ) : null}
+        </section>
+      ) : null}
 
       {/* Not `!released`: an expired estimate was never released and is still
           not editable — nothing leads out of `expired` (§25.3). */}
