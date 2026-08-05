@@ -2,7 +2,12 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { changeEstimateStatusAction, sendEstimateAction } from "@/features/estimates/actions";
+import {
+  changeEstimateStatusAction,
+  generateEstimateAction,
+  sendEstimateAction,
+} from "@/features/estimates/actions";
+import { confidenceBand } from "@/features/ai/estimate-draft";
 import { EstimateEditor } from "@/features/estimates/EstimateEditor";
 import { isEditable, isReleased } from "@/features/estimates/model";
 import { getEstimate } from "@/features/estimates/service";
@@ -107,6 +112,7 @@ export default async function EstimatePage({
 
   const query = await searchParams;
   const sentOk = query.sent === "1";
+  const draftedOk = query.drafted === "1";
   const blockedParam = query.blocked;
   const blocked = blockerMessage(dict, Array.isArray(blockedParam) ? blockedParam[0] : blockedParam);
 
@@ -157,6 +163,30 @@ export default async function EstimatePage({
           {formatMoney(Number(estimate.total), l, currency)}
         </p>
       </div>
+
+      {/* §16.4: the model's own confidence, in front of the owner *before*
+          Approve. A low number is not a reason to hide the draft — it is a
+          reason to read it closely, which nobody does if nobody says so. */}
+      {estimate.aiConfidence !== null && isEditable(estimate.status) ? (
+        <p
+          className={
+            confidenceBand(estimate.aiConfidence) === "low"
+              ? "rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900"
+              : "rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700"
+          }
+        >
+          {e.aiConfidenceLabel[confidenceBand(estimate.aiConfidence)]} {e.aiCheckBeforeApprove}
+        </p>
+      ) : null}
+
+      {draftedOk ? (
+        <p
+          role="status"
+          className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-900"
+        >
+          {e.draftedNotice}
+        </p>
+      ) : null}
 
       {sentOk ? (
         <p
@@ -291,6 +321,44 @@ export default async function EstimatePage({
             </p>
           ) : null}
         </section>
+      ) : null}
+
+      {/* §16.2: describe the job, get a starting point. Only on something still
+          editable — regenerating a sent document would rewrite what a customer
+          was asked to agree to. */}
+      {isEditable(estimate.status) ? (
+        <form
+          action={generateEstimateAction}
+          className="rounded-2xl border border-slate-200 bg-white p-5"
+        >
+          <input type="hidden" name="locale" value={l} />
+          <input type="hidden" name="job_id" value={jobId} />
+          <input type="hidden" name="estimate_id" value={estimate.id} />
+          <input type="hidden" name="tax_rate" value={estimate.taxRate} />
+          <h2 className="text-sm font-bold uppercase tracking-wide text-slate-500">
+            {e.aiSection}
+          </h2>
+          <label htmlFor="ai_description" className="mt-3 block text-sm text-slate-600">
+            {e.aiDescriptionLabel}
+          </label>
+          <textarea
+            id="ai_description"
+            name="description"
+            rows={3}
+            maxLength={4000}
+            placeholder={e.aiDescriptionPlaceholder}
+            className="mt-1.5 block w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200"
+          />
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <button
+              type="submit"
+              className="min-h-12 rounded-xl border-2 border-brand-200 bg-white px-5 font-semibold text-brand-800 hover:border-brand-400 hover:bg-brand-50"
+            >
+              {e.aiDraftButton}
+            </button>
+            <span className="text-xs text-slate-500">{e.aiReplacesLines}</span>
+          </div>
+        </form>
       ) : null}
 
       {/* Not `!released`: an expired estimate was never released and is still

@@ -72,6 +72,9 @@ export interface EstimateDetail extends EstimateSummary {
    * Never rendered on any page a customer can reach.
    */
   publicToken: string | null;
+  /** §16.4, null when a person wrote this estimate. */
+  aiConfidence: number | null;
+  aiGeneratedAt: string | null;
   items: EstimateItemRow[];
 }
 
@@ -111,7 +114,7 @@ export async function getEstimate(
     supabase
       .from("estimates")
       .select(
-        "id, job_id, version, status, title, total, subtotal, tax, tax_rate, locale, scope, terms, created_at, sent_at, expires_at, public_token",
+        "id, job_id, version, status, title, total, subtotal, tax, tax_rate, locale, scope, terms, created_at, sent_at, expires_at, public_token, ai_confidence, ai_generated_at",
       )
       .eq("organization_id", organizationId)
       .eq("id", estimateId)
@@ -147,6 +150,8 @@ export async function getEstimate(
     sentAt: row.sent_at,
     expiresAt: row.expires_at,
     publicToken: row.public_token,
+    aiConfidence: row.ai_confidence === null ? null : Number(row.ai_confidence),
+    aiGeneratedAt: row.ai_generated_at,
     items: (items ?? []).map((item) => ({
       id: item.id,
       itemType: item.item_type as EstimateItemType,
