@@ -179,14 +179,28 @@ export default async function GoogleSettingsPage({
                   </dd>
                 </div>
               </dl>
-              <a
-                href={spreadsheetUrl(spreadsheet.spreadsheet_id as string)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-4 inline-block rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-900"
-              >
-                {g.openSheet}
-              </a>
+              <div className="mt-4 flex flex-wrap gap-3">
+                <a
+                  href={spreadsheetUrl(spreadsheet.spreadsheet_id as string)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-block rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-900"
+                >
+                  {g.openSheet}
+                </a>
+                {/* Only pulls the schedule forward: the queue is filled by
+                    triggers on every write, so skipping this button costs
+                    nothing but time. */}
+                <form action="/api/google/sync-now" method="post">
+                  <input type="hidden" name="locale" value={l} />
+                  <button
+                    type="submit"
+                    className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200"
+                  >
+                    {g.syncNow}
+                  </button>
+                </form>
+              </div>
             </>
           ) : (
             <>

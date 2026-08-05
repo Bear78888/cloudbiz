@@ -677,6 +677,7 @@ export const en = {
       comingSoonShort: "Available soon.",
       skipForNow: "Skip for now",
       openSheet: "Open sheet",
+      syncNow: "Sync now",
       sheetName: "Spreadsheet",
       lastSynced: "Last synced",
       neverSynced: "Not yet",
@@ -695,6 +696,13 @@ export const en = {
         // §14.14, verbatim: the reassurance is the point.
         sheet_unavailable:
           "Your Google Sheet is unavailable. Your HandyAlliance data is safe.",
+        sync_done: "Everything is up to date in your sheet.",
+        sync_nothing_due: "Nothing new to sync — your sheet is already current.",
+        // Partial is its own message on purpose: "done" would be a lie and
+        // "failed" would be scarier than the truth. The rest retries itself.
+        sync_partial:
+          "Some changes could not be sent to Google yet. We will keep trying — nothing is lost.",
+        no_spreadsheet: "Create your spreadsheet first, then we can sync to it.",
         access_denied: "You cancelled the Google sign-in. Nothing changed.",
         no_refresh_token:
           "Google did not give us lasting access. Try connecting again and approve the request.",
