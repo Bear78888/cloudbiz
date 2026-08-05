@@ -60,8 +60,15 @@ test("a description becomes a draft the owner still has to approve", async ({ pa
   await submitAndSettle(page, page.getByRole("button", { name: /Write a draft/i }));
 
   await page.goto(estimateUrl);
-  await expect(visibleText(page, "Installation, 3 hours")).toBeVisible();
-  await expect(visibleText(page, "40-gallon water heater")).toBeVisible();
+  // The draft lands in the editor, so the lines are input values — not text
+  // nodes. `getByText` would find nothing here and say so, which is how this
+  // assertion got written correctly the second time.
+  await expect(page.locator("#item_description_0")).toHaveValue("Installation, 3 hours");
+  await expect(page.locator("#item_unit_price_0")).toHaveValue("95");
+  await expect(page.locator("#item_description_1")).toHaveValue("40-gallon water heater");
+  await expect(page.locator("#item_unit_price_1")).toHaveValue("780");
+  // 3 × 95 + 780 = 1065, computed by the same function the server stored from.
+  await expect(visibleText(page, "$1,065.00")).toBeVisible();
 
   // §16.4 reaching the interface: the owner is told how sure the model was.
   await expect(visibleText(page, "The AI was confident about this draft.")).toBeVisible();
@@ -73,7 +80,8 @@ test("a description becomes a draft the owner still has to approve", async ({ pa
   await expect(page.getByRole("button", { name: /^Approve$/ })).toBeVisible();
 
   // The assumptions land in the scope the owner reads, not in a hidden field.
-  await expect(visibleText(page, "Standard 40-gallon tank")).toBeVisible();
+  await expect(page.locator("#scope")).toHaveValue(/Standard 40-gallon tank/);
+  await expect(page.locator("#scope")).toHaveValue(/Assumptions:/);
 
   expect(sentToModel().length, "the draft appeared without calling the model").toBe(before + 1);
 });
@@ -121,7 +129,7 @@ test("a low-confidence draft is flagged, not hidden", async ({ page }) => {
 
   await page.goto(estimateUrl);
   // The draft is there to read...
-  await expect(visibleText(page, "Investigate")).toBeVisible();
+  await expect(page.locator("#item_description_0")).toHaveValue("Investigate");
   // ...and the warning is there too, before Approve.
   await expect(visibleText(page, "The AI wasn't confident about this draft.")).toBeVisible();
   await expect(page.getByRole("button", { name: /^Approve$/ })).toBeVisible();
