@@ -9,7 +9,15 @@ import { TABS, headerRow, readMeRows, spreadsheetTitle, type TabKey } from "./sh
  * user deleted, a malformed response — are testable without a Google account.
  */
 
-const SHEETS_API = "https://sheets.googleapis.com/v4/spreadsheets";
+/**
+ * Base URL of the Sheets API. Overridable so CI can point the worker at a stub
+ * and assert the invariant that matters: the number of events marked `synced`
+ * equals the number of rows the sheet actually accepted. Today's defect —
+ * "synced" with nothing written — passed every green test precisely because
+ * nobody compared those two numbers.
+ */
+const SHEETS_API =
+  process.env.GOOGLE_SHEETS_API_BASE ?? "https://sheets.googleapis.com/v4/spreadsheets";
 
 export type SheetsFailure =
   | "unauthorized" // token rejected: reconnect

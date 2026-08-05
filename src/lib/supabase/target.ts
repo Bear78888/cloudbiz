@@ -77,9 +77,40 @@ export function verifySupabaseProjectRef(environment: EnvironmentInput = process
   return expectedRef;
 }
 
-/** The single authoritative origin for elevated access, derived from the verified ref. */
+/**
+ * The single authoritative origin for elevated access, derived from the
+ * verified ref — except when the project URL says this is a local stack.
+ *
+ * That exception is not a convenience. Without it the two clients disagree:
+ * `verifySupabaseEnvironmentTarget` accepts a localhost stack for the session
+ * client, while this function unconditionally returned the hosted project. So
+ * during local development the *elevated* client pointed at production. In CI
+ * that surfaced as "Invalid API key", because the local service key is not the
+ * hosted one — but the failure is only accidental protection. A developer who
+ * happens to have the real service key exported would have had local runs
+ * writing to production, silently, with no error to notice.
+ *
+ * Reachable only when `NEXT_PUBLIC_SUPABASE_URL` is itself localhost, which no
+ * deployed environment has. The ref is still verified first, so a BizMetria ref
+ * is refused here exactly as before.
+ */
 export function resolveSupabaseAdminUrl(environment: EnvironmentInput = process.env): string {
-  return `https://${verifySupabaseProjectRef(environment)}.supabase.co`;
+  const ref = verifySupabaseProjectRef(environment);
+
+  const projectUrl = environment.NEXT_PUBLIC_SUPABASE_URL;
+  if (projectUrl) {
+    try {
+      const parsed = new URL(projectUrl);
+      if (parsed.hostname === "127.0.0.1" || parsed.hostname === "localhost") {
+        return projectUrl.replace(/\/$/, "");
+      }
+    } catch {
+      // Not a URL: fall through to the hosted origin, which the session guard
+      // will reject on its own terms.
+    }
+  }
+
+  return `https://${ref}.supabase.co`;
 }
 
 export function verifySupabaseEnvironmentTarget(
