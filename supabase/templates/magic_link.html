@@ -1,0 +1,51 @@
+<!--
+  "Magic link or OTP" (§10.1). Sent from the "Email me a sign-in link" button
+  on the sign-in page (`handleMagicLink` in src/features/auth/forms.tsx),
+  which passes the page's current locale as `.Data.preferred_locale` the same
+  way sign-up does — see confirmation.html for why the whole document is
+  duplicated rather than translated fragment by fragment.
+
+  `{{ .ConfirmationURL }}` already lands on the right locale on its own; see
+  confirmation.html for why.
+-->
+{{ if eq .Data.preferred_locale "es" }}
+<!doctype html>
+<html lang="es">
+<body style="margin:0;padding:24px;background:#f8fafc;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;color:#0f172a">
+  <div style="max-width:480px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:16px;padding:28px">
+    <p style="margin:0 0 16px;font-size:18px;font-weight:700">Tu enlace de acceso</p>
+    <p style="margin:0 0 20px;color:#334155">
+      Usa el botón de abajo para iniciar sesión en HandyAlliance. El enlace vence pronto y solo se puede usar una vez.
+    </p>
+    <p style="margin:0 0 24px">
+      <a href="{{ .ConfirmationURL }}" style="display:inline-block;background:#2554eb;color:#ffffff;text-decoration:none;padding:14px 24px;border-radius:12px;font-weight:600">Iniciar sesión</a>
+    </p>
+    <p style="margin:0 0 4px;color:#64748b;font-size:13px">Si el botón no funciona, copia esta dirección en tu navegador:</p>
+    <p style="margin:0;color:#64748b;font-size:13px;word-break:break-all">{{ .ConfirmationURL }}</p>
+    <p style="margin:24px 0 0;color:#94a3b8;font-size:12px">
+      Si tú no pediste este enlace, puedes ignorar este correo.
+    </p>
+  </div>
+</body>
+</html>
+{{ else }}
+<!doctype html>
+<html lang="en">
+<body style="margin:0;padding:24px;background:#f8fafc;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;color:#0f172a">
+  <div style="max-width:480px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:16px;padding:28px">
+    <p style="margin:0 0 16px;font-size:18px;font-weight:700">Your sign-in link</p>
+    <p style="margin:0 0 20px;color:#334155">
+      Use the button below to sign in to HandyAlliance. This link expires shortly and can only be used once.
+    </p>
+    <p style="margin:0 0 24px">
+      <a href="{{ .ConfirmationURL }}" style="display:inline-block;background:#2554eb;color:#ffffff;text-decoration:none;padding:14px 24px;border-radius:12px;font-weight:600">Sign in</a>
+    </p>
+    <p style="margin:0 0 4px;color:#64748b;font-size:13px">If the button doesn't work, copy this address into your browser:</p>
+    <p style="margin:0;color:#64748b;font-size:13px;word-break:break-all">{{ .ConfirmationURL }}</p>
+    <p style="margin:24px 0 0;color:#94a3b8;font-size:12px">
+      If you didn't request this, you can ignore this email.
+    </p>
+  </div>
+</body>
+</html>
+{{ end }}

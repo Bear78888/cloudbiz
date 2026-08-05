@@ -96,6 +96,11 @@ function SignInFormInner({ locale, strings }: { locale: Locale; strings: AuthStr
         email,
         options: {
           emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(nextPath)}`,
+          // Same field name signUp() sets (§10.1). GoTrue exposes it to the
+          // email template as `.Data.preferred_locale`, which is how the
+          // magic-link email picks its language — see
+          // supabase/templates/magic_link.html.
+          data: { preferred_locale: locale },
         },
       });
       setNotice(

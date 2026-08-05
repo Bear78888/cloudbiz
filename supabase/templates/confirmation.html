@@ -1,0 +1,61 @@
+<!--
+  "Confirm sign up" (§10.1). Sent once, right after signUp().
+
+  `.Data.preferred_locale` is `auth.users.user_metadata.preferred_locale`,
+  which forms.tsx sets from the locale the sign-up page was on — this is
+  Supabase's own templating variable, documented at
+  https://supabase.com/docs/guides/auth/auth-email-templates. There is no
+  per-recipient language switch in GoTrue otherwise, so the whole document is
+  duplicated behind an if/else rather than machine-translating fragments:
+  a broken tag in one branch cannot leak into the other.
+
+  `{{ .ConfirmationURL }}` already carries the right destination on its own —
+  it embeds the `redirect_to` that signUp()'s `emailRedirectTo` set
+  (`/auth/callback?next=/{locale}/onboarding`), so confirming in Spanish lands
+  on the Spanish onboarding page without anything here needing to know that.
+  This file only decides which language explains the button.
+
+  GoTrue's mailer sends HTML only — there is no plain-text alternative part
+  the way our own Resend-based estimate email has one.
+-->
+{{ if eq .Data.preferred_locale "es" }}
+<!doctype html>
+<html lang="es">
+<body style="margin:0;padding:24px;background:#f8fafc;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;color:#0f172a">
+  <div style="max-width:480px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:16px;padding:28px">
+    <p style="margin:0 0 16px;font-size:18px;font-weight:700">Confirma tu cuenta</p>
+    <p style="margin:0 0 20px;color:#334155">
+      Confirma tu correo para terminar de crear tu cuenta gratuita de HandyAlliance.
+    </p>
+    <p style="margin:0 0 24px">
+      <a href="{{ .ConfirmationURL }}" style="display:inline-block;background:#2554eb;color:#ffffff;text-decoration:none;padding:14px 24px;border-radius:12px;font-weight:600">Confirmar mi correo</a>
+    </p>
+    <p style="margin:0 0 4px;color:#64748b;font-size:13px">Si el botón no funciona, copia esta dirección en tu navegador:</p>
+    <p style="margin:0;color:#64748b;font-size:13px;word-break:break-all">{{ .ConfirmationURL }}</p>
+    <p style="margin:24px 0 0;color:#94a3b8;font-size:12px">
+      Si tú no creaste esta cuenta, puedes ignorar este correo.
+    </p>
+  </div>
+</body>
+</html>
+{{ else }}
+<!doctype html>
+<html lang="en">
+<body style="margin:0;padding:24px;background:#f8fafc;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;color:#0f172a">
+  <div style="max-width:480px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:16px;padding:28px">
+    <p style="margin:0 0 16px;font-size:18px;font-weight:700">Confirm your account</p>
+    <p style="margin:0 0 20px;color:#334155">
+      Confirm your email to finish creating your free HandyAlliance account.
+    </p>
+    <p style="margin:0 0 24px">
+      <a href="{{ .ConfirmationURL }}" style="display:inline-block;background:#2554eb;color:#ffffff;text-decoration:none;padding:14px 24px;border-radius:12px;font-weight:600">Confirm my email</a>
+    </p>
+    <p style="margin:0 0 4px;color:#64748b;font-size:13px">If the button doesn't work, copy this address into your browser:</p>
+    <p style="margin:0;color:#64748b;font-size:13px;word-break:break-all">{{ .ConfirmationURL }}</p>
+    <p style="margin:24px 0 0;color:#94a3b8;font-size:12px">
+      If you didn't create this account, you can ignore this email.
+    </p>
+  </div>
+</body>
+</html>
+{{ end }}

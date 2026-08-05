@@ -102,7 +102,7 @@ export function renderEstimateEmail(input: EstimateEmailInput): RenderedEmail {
       `${t.totalLabel}: ${input.total}`,
     )}</p>
     <p style="margin:0 0 24px">
-      <a href="${escapeHtml(input.link)}" style="display:inline-block;background:#0d9488;color:#ffffff;text-decoration:none;padding:14px 24px;border-radius:12px;font-weight:600">${escapeHtml(
+      <a href="${escapeHtml(input.link)}" style="display:inline-block;background:#2554eb;color:#ffffff;text-decoration:none;padding:14px 24px;border-radius:12px;font-weight:600">${escapeHtml(
         t.cta,
       )}</a>
     </p>
