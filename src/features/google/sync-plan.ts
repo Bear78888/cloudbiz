@@ -35,6 +35,24 @@ export type EventOutcome = "synced" | "retrying" | "failed" | "disconnected";
  * attempts are noise. `not_found` means the spreadsheet was deleted (§14.14);
  * same reasoning, the queue waits rather than churns.
  */
+/**
+ * Outcome for a single event.
+ *
+ * `rendered` is the guard that was missing: an event whose row was never built
+ * must not be marked synced. That is exactly how a 400 from PostgREST — asking
+ * for a column that does not exist — turned into "everything is up to date"
+ * while the job never reached the spreadsheet. A row we could not produce is a
+ * failure, not a success with nothing in it.
+ */
+export function eventOutcome(
+  failure: "unauthorized" | "not_found" | "rate_limited" | "failed" | null,
+  attempts: number,
+  rendered: boolean,
+): EventOutcome {
+  if (failure === null && !rendered) return nextOutcome("failed", attempts);
+  return nextOutcome(failure, attempts);
+}
+
 export function nextOutcome(
   failure: "unauthorized" | "not_found" | "rate_limited" | "failed" | null,
   attempts: number,

@@ -14,7 +14,7 @@ import { customerToRow, jobToRow, type RowContext } from "./rows";
 import { getAccessTokenForOrganization, markConnectionNeedsReconnect } from "./service";
 import { headerRow, tabTitle } from "./sheet-schema";
 import { type SheetsFailure } from "./sheets";
-import { MAX_ATTEMPTS, backoffMs, nextOutcome, planWrites, rowRange } from "./sync-plan";
+import { MAX_ATTEMPTS, backoffMs, eventOutcome, planWrites, rowRange } from "./sync-plan";
 
 /**
  * The sync worker (§14.9 steps 4–8, §14.11).
@@ -147,19 +147,51 @@ export async function runSyncForOrganization(organizationId: string): Promise<Sy
     .map((e) => e.entity_id as string);
 
   const rowsByTab: Record<"jobs" | "customers", string[][]> = { jobs: [], customers: [] };
+  // Which entities actually produced a row. An event whose row was never built
+  // must never be reported as synced — see eventOutcome().
+  const rendered = new Set<string>();
+  let readFailure: SheetsFailure | null = null;
 
   if (jobIds.length > 0) {
-    const { data: jobs } = await admin
+    // `source`, not `lead_source`: that is the column jobs actually has, and
+    // asking for the other one is what produced a 400 that this code used to
+    // swallow. No embedded select either — an embed depends on PostgREST
+    // resolving a relationship from its schema cache, and when that fails the
+    // whole query fails (the same trap as getCurrentMembership).
+    const { data: jobs, error: jobsError } = await admin
       .from("jobs")
       .select(
-        "id, status, created_at, updated_at, service, title, description, lead_source, priority, address, scheduled_start, estimate_amount, job_total, materials_cost, payment_status, notes, deleted_at, last_follow_up_at, review_requested_at, customers (name, phone, email, preferred_locale)",
+        "id, customer_id, status, created_at, updated_at, service, title, description, source, priority, address, scheduled_start, estimate_amount, job_total, materials_cost, payment_status, notes, deleted_at, last_follow_up_at, review_requested_at",
       )
       .in("id", jobIds);
 
+    if (jobsError) {
+      console.error("[google] could not read jobs for sync:", jobsError.message);
+      readFailure = "failed";
+    }
+
+    const customerIdsForJobs = [
+      ...new Set((jobs ?? []).map((job) => job.customer_id as string | null).filter(Boolean)),
+    ] as string[];
+    const customersById = new Map<string, Record<string, unknown>>();
+    if (customerIdsForJobs.length > 0) {
+      const { data: related, error: relatedError } = await admin
+        .from("customers")
+        .select("id, name, phone, email, preferred_locale")
+        .in("id", customerIdsForJobs);
+      if (relatedError) {
+        console.error("[google] could not read customers for jobs:", relatedError.message);
+        readFailure = "failed";
+      }
+      for (const customer of related ?? []) {
+        customersById.set(customer.id as string, customer as Record<string, unknown>);
+      }
+    }
+
     for (const job of jobs ?? []) {
-      const customer = (Array.isArray(job.customers) ? job.customers[0] : job.customers) as
-        | { name?: string; phone?: string; email?: string; preferred_locale?: string }
-        | null;
+      const customer = (job.customer_id
+        ? (customersById.get(job.customer_id as string) ?? null)
+        : null) as { name?: string; phone?: string; email?: string; preferred_locale?: string } | null;
       rowsByTab.jobs.push(
         jobToRow(
           {
@@ -174,7 +206,7 @@ export async function runSyncForOrganization(organizationId: string): Promise<Sy
             service: (job.service as string | null) ?? null,
             title: job.title as string,
             description: (job.description as string | null) ?? null,
-            leadSource: (job.lead_source as string | null) ?? null,
+            leadSource: (job.source as string | null) ?? null,
             priority: job.priority as string,
             address: (job.address as string | null) ?? null,
             scheduledStart: (job.scheduled_start as string | null) ?? null,
@@ -191,16 +223,22 @@ export async function runSyncForOrganization(organizationId: string): Promise<Sy
           context,
         ),
       );
+      rendered.add(job.id as string);
     }
   }
 
   if (customerIds.length > 0) {
-    const { data: customers } = await admin
+    const { data: customers, error: customersError } = await admin
       .from("customers")
       .select(
         "id, name, phone, email, preferred_locale, address, lead_source, notes, updated_at",
       )
       .in("id", customerIds);
+
+    if (customersError) {
+      console.error("[google] could not read customers for sync:", customersError.message);
+      readFailure = "failed";
+    }
 
     for (const customer of customers ?? []) {
       rowsByTab.customers.push(
@@ -225,12 +263,13 @@ export async function runSyncForOrganization(organizationId: string): Promise<Sy
           context,
         ),
       );
+      rendered.add(customer.id as string);
     }
   }
 
   const tabMapping = (sheet.tab_mapping ?? {}) as Record<string, number>;
   const spreadsheetId = sheet.spreadsheet_id as string;
-  let failure: SheetsFailure | null = null;
+  let failure: SheetsFailure | null = readFailure;
 
   for (const key of ["jobs", "customers"] as const) {
     const rows = rowsByTab[key];
@@ -273,7 +312,7 @@ export async function runSyncForOrganization(organizationId: string): Promise<Sy
 
   for (const event of due) {
     const attempts = (event.attempts as number) ?? 0;
-    const outcome = nextOutcome(failure, attempts);
+    const outcome = eventOutcome(failure, attempts, rendered.has(event.entity_id as string));
     result[outcome === "synced" ? "synced" : outcome] += 1;
 
     await admin
