@@ -1,16 +1,21 @@
 import { describe, expect, it } from "vitest";
 
 import { en } from "@/lib/i18n/en";
+import { ESTIMATE_STATUSES, jobStatusForEstimate } from "@/features/estimates/model";
 import {
+  CLOSED_STATUSES,
   CUSTOMER_LOCALES,
   JOB_PRIORITIES,
   JOB_STATUSES,
+  JOB_STATUS_FACTS,
   JOB_VIEWS,
   LEAD_SOURCES,
   PAYMENT_STATUSES,
   customerMatchKey,
   derivePaymentStatus,
   isClosed,
+  isEstimateOwnedStatus,
+  isJobStatus,
   jobMargin,
   matchesView,
   normalizePhone,
@@ -133,6 +138,47 @@ describe("views (§13.7)", () => {
     expect(matchesView(job("estimate_sent", "unpaid"), "unpaid")).toBe(false);
     expect(matchesView(job("lost", "unpaid"), "unpaid")).toBe(false);
     expect(matchesView(job("canceled", "unpaid"), "unpaid")).toBe(false);
+  });
+
+  // A status added to the registry and nowhere else used to be invisible in
+  // every classification the rest of the app reads. `JOB_STATUS_FACTS` makes
+  // omission a compile error; these check the runtime side of the same claim.
+  it("says what every status means, with nothing left over", () => {
+    expect(Object.keys(JOB_STATUS_FACTS).sort()).toEqual([...JOB_STATUSES].sort());
+  });
+
+  it("derives the closed set rather than keeping a second copy of it", () => {
+    expect([...CLOSED_STATUSES]).toEqual(["paid", "lost", "canceled"]);
+    for (const status of JOB_STATUSES) {
+      expect(isClosed(status)).toBe(JOB_STATUS_FACTS[status].closed);
+      expect(CLOSED_STATUSES.includes(status)).toBe(isClosed(status));
+    }
+  });
+
+  // §16.11: these three are written by the estimate. Naming them here is what
+  // stops the two features drifting apart silently.
+  it("marks exactly the estimate-written statuses as the estimate's", () => {
+    expect(JOB_STATUSES.filter(isEstimateOwnedStatus)).toEqual([
+      "estimate_draft",
+      "estimate_sent",
+      "estimate_accepted",
+    ]);
+  });
+
+  it("agrees with the estimate model about which job statuses it writes", () => {
+    for (const status of ESTIMATE_STATUSES) {
+      const written = jobStatusForEstimate(status);
+      if (written !== null) {
+        expect(isJobStatus(written)).toBe(true);
+        expect(isEstimateOwnedStatus(written as JobStatus)).toBe(true);
+      }
+    }
+  });
+
+  it("never calls an open job closed", () => {
+    for (const status of JOB_STATUSES) {
+      if (isEstimateOwnedStatus(status)) expect(isClosed(status)).toBe(false);
+    }
   });
 
   it("every status appears in at least one view besides All Jobs", () => {

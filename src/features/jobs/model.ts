@@ -56,6 +56,52 @@ export function isJobStatus(value: string): value is JobStatus {
   return (JOB_STATUSES as readonly string[]).includes(value);
 }
 
+/**
+ * What each status means to the rest of the system (§13.6).
+ *
+ * A `Record<JobStatus, …>` rather than a list, and that is the whole point:
+ * adding a status to `JOB_STATUSES` without saying what it means here is a
+ * compile error. The lists this replaces were hand-maintained, so a new status
+ * silently fell outside them — it would not have counted as closed, and the
+ * dashboard would have gone on counting a finished job as upcoming work.
+ *
+ * Unlike the estimate's `TRANSITIONS` (§16.5) there is deliberately no table of
+ * allowed edges here. An estimate has a rule that must hold — nothing reaches a
+ * customer unapproved — and expressing it as a missing edge makes it
+ * unbypassable. A job's status is a label the owner puts on their own work: a
+ * repeat customer books without an estimate, a misclick gets corrected
+ * backwards, a lost job comes back in March. A field tool that answered "you
+ * cannot go from New Lead to Scheduled" would be wrong about the trade, not
+ * strict about it. So what is declared here is what a status *means*, not what
+ * may follow it — that is the part other code reads, and the part that broke
+ * when it was a list someone had to remember to update.
+ */
+export const JOB_STATUS_FACTS: Record<
+  JobStatus,
+  {
+    /** The job is over, one way or another: no upcoming work, nothing to chase. */
+    closed: boolean;
+    /**
+     * Who writes it. `estimate` statuses are also written by §16.11 when an
+     * estimate moves, so a hand-set value can be overwritten later — that is
+     * the estimate being the source of truth about itself, not a bug.
+     */
+    setBy: "person" | "estimate";
+  }
+> = {
+  new_lead: { closed: false, setBy: "person" },
+  contacted: { closed: false, setBy: "person" },
+  estimate_draft: { closed: false, setBy: "estimate" },
+  estimate_sent: { closed: false, setBy: "estimate" },
+  estimate_accepted: { closed: false, setBy: "estimate" },
+  scheduled: { closed: false, setBy: "person" },
+  in_progress: { closed: false, setBy: "person" },
+  completed: { closed: false, setBy: "person" },
+  paid: { closed: true, setBy: "person" },
+  lost: { closed: true, setBy: "person" },
+  canceled: { closed: true, setBy: "person" },
+};
+
 export function isLeadSource(value: string): value is LeadSource {
   return (LEAD_SOURCES as readonly string[]).includes(value);
 }
@@ -201,11 +247,24 @@ export function groupByPaymentOutcome(
   return grouped;
 }
 
-/** Statuses that mean the job is over, one way or another. */
-export const CLOSED_STATUSES: readonly JobStatus[] = ["paid", "lost", "canceled"];
+/**
+ * Statuses that mean the job is over, one way or another.
+ *
+ * Derived from `JOB_STATUS_FACTS`, not written out again: this used to be a
+ * second list of the same knowledge, and a status added to one and not the
+ * other would have been counted as upcoming work forever.
+ */
+export const CLOSED_STATUSES: readonly JobStatus[] = JOB_STATUSES.filter(
+  (status) => JOB_STATUS_FACTS[status].closed,
+);
 
 export function isClosed(status: JobStatus): boolean {
-  return CLOSED_STATUSES.includes(status);
+  return JOB_STATUS_FACTS[status].closed;
+}
+
+/** Statuses an estimate writes on the job (§16.11). */
+export function isEstimateOwnedStatus(status: JobStatus): boolean {
+  return JOB_STATUS_FACTS[status].setBy === "estimate";
 }
 
 // ---------------------------------------------------------------------------
