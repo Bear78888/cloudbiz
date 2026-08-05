@@ -37,6 +37,7 @@ declare
   job_a uuid;
   job_b uuid;
   job_outbox uuid;
+  estimate_a uuid;
   import_result jsonb;
   relation_name text;
 begin
@@ -672,6 +673,54 @@ begin
       if sqlerrm like 'FAIL(17)%' then raise; end if;
       raise;
   end;
+
+  -- 18. Estimates (§16) follow the Job Tracker rules: staff-accessible within
+  -- the organization, invisible across it, and no way to delete a document
+  -- someone may be relying on.
+  perform pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+  insert into public.estimates (organization_id, job_id, title, subtotal, tax, total)
+  values (org_a, job_a, 'Faucet replacement estimate', 280.00, 23.10, 303.10)
+  returning id into estimate_a;
+
+  insert into public.estimate_items (estimate_id, organization_id, description, quantity, unit_price, total)
+  values (estimate_a, org_a, 'Labor, 2 hours', 2, 90.00, 180.00);
+
+  -- Organization B sees neither.
+  perform pg_temp.act_as('00000000-0000-0000-0000-00000000000b');
+  if exists (select 1 from public.estimates where id = estimate_a) then
+    raise exception 'FAIL(18a): organization B can read organization A''s estimate';
+  end if;
+  if exists (select 1 from public.estimate_items where organization_id = org_a) then
+    raise exception 'FAIL(18b): organization B can read organization A''s estimate items';
+  end if;
+
+  -- And cannot plant one in A.
+  mutation_blocked := false;
+  begin
+    insert into public.estimates (organization_id, title) values (org_a, 'Planted');
+  exception when others then
+    mutation_blocked := true;
+  end;
+  if not mutation_blocked then
+    raise exception 'FAIL(18c): cross-tenant estimate insert was accepted';
+  end if;
+
+  -- A sent estimate cannot be deleted: it is the document a disagreement turns
+  -- on. Removal is a status (§16.8), not a DELETE.
+  perform pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+  begin
+    delete from public.estimates where id = estimate_a;
+  exception when insufficient_privilege then null;
+  end;
+  if not exists (select 1 from public.estimates where id = estimate_a) then
+    raise exception 'FAIL(18d): an estimate was deletable';
+  end if;
+
+  -- A line item, by contrast, is ordinary editing of a draft.
+  delete from public.estimate_items where estimate_id = estimate_a;
+  if exists (select 1 from public.estimate_items where estimate_id = estimate_a) then
+    raise exception 'FAIL(18e): an estimate line could not be removed';
+  end if;
 
   perform pg_temp.act_as_postgres();
   raise notice 'RLS isolation tests passed';
