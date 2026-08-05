@@ -73,7 +73,7 @@ function StatusButton({
  * the owner has to prefix, because it silently points somewhere real.
  */
 function customerLink(locale: Locale, token: string, appUrl: string | null): string {
-  const path = `/${locale}/e/${token}`;
+  const path = `/e/${locale}/${token}`;
   return appUrl ? `${appUrl.replace(/\/$/, "")}${path}` : path;
 }
 
@@ -257,7 +257,7 @@ export default async function EstimatePage({
           <input
             id="customer-link"
             readOnly
-            value={customerLink(l, estimate.publicToken, appUrl)}
+            value={customerLink(estimate.locale, estimate.publicToken, appUrl)}
             className="mt-3 w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 font-mono text-sm text-slate-800"
           />
           {estimate.expiresAt ? (

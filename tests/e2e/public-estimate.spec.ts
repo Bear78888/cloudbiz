@@ -64,7 +64,7 @@ test("the customer opens the link, sees only the estimate, and accepts", async (
 }) => {
   const { link, estimateUrl, jobUrl } = await sendAnEstimate(page, "1450");
 
-  expect(link).toMatch(/\/en\/e\/[A-Za-z0-9_-]{43}$/);
+  expect(link).toMatch(/\/e\/en\/[A-Za-z0-9_-]{43}$/);
 
   // A different browser context: no cookies, no session — a stranger with a URL.
   const customerContext = await browser.newContext();
@@ -80,10 +80,16 @@ test("the customer opens the link, sees only the estimate, and accepts", async (
   for (const secret of [CUSTOMER.phone, CUSTOMER.email, "5125550181"]) {
     expect(body, `the public page leaked ${secret}`).not.toContain(secret.toLowerCase());
   }
-  // No way into the app from here, and no sign the app exists.
-  expect(body).not.toContain("job tracker");
-  expect(body).not.toContain("sign in");
+  // No marketing chrome. This page is the pro's document, not an advertisement
+  // for the platform stapled to it — and a "Sign In" link on a page sent to
+  // someone else's customer is a question they should never have to ask.
+  for (const chrome of ["job tracker", "sign in", "pricing", "choose my tools", "all tools"]) {
+    expect(body, `the customer's page shows platform chrome: "${chrome}"`).not.toContain(chrome);
+  }
+  await expect(customer.locator("header")).toHaveCount(0);
+  await expect(customer.locator("footer")).toHaveCount(0);
   await expect(customer.locator('a[href*="/app/"]')).toHaveCount(0);
+  await expect(customer.locator('a[href*="/sign-in"]')).toHaveCount(0);
 
   // noindex, so a forwarded link never turns into a search result.
   await expect(customer.locator('meta[name="robots"]')).toHaveAttribute(
@@ -126,7 +132,7 @@ test("a wrong token gives nothing away", async ({ page, browser }) => {
 
   // Malformed input never reaches a query, and still 404s rather than erroring.
   for (const junk of ["short", "../../etc/passwd", "%27%20or%201=1--"]) {
-    const response = await visitor.goto(`${new URL(link).origin}/en/e/${junk}`);
+    const response = await visitor.goto(`${new URL(link).origin}/e/en/${junk}`);
     expect(response?.status(), `"${junk}" should be a plain 404`).toBe(404);
   }
 

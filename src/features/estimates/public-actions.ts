@@ -30,7 +30,7 @@ export async function answerEstimateAction(formData: FormData): Promise<void> {
 
   // The registry, positively: only these two words are an answer.
   if (answerRaw !== "accepted" && answerRaw !== "rejected") {
-    redirect(`/${locale}/e/${token}`);
+    redirect(`/e/${locale}/${token}`);
   }
 
   const requestHeaders = await headers();
@@ -41,7 +41,7 @@ export async function answerEstimateAction(formData: FormData): Promise<void> {
   );
   if (!limit.allowed) {
     console.warn("[public-estimate] answer rate limit reached");
-    redirect(`/${locale}/e/${token}?answered=slow`);
+    redirect(`/e/${locale}/${token}?answered=slow`);
   }
 
   const result = await answerEstimateByToken(token, answerRaw);
@@ -50,8 +50,8 @@ export async function answerEstimateAction(formData: FormData): Promise<void> {
   // no account and no session to put it in, and a query parameter survives the
   // redirect without inventing one.
   if (!result.ok && result.reason === "already_answered") {
-    redirect(`/${locale}/e/${token}?answered=already`);
+    redirect(`/e/${locale}/${token}?answered=already`);
   }
 
-  redirect(`/${locale}/e/${token}`);
+  redirect(`/e/${locale}/${token}`);
 }
