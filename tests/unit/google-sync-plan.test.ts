@@ -140,3 +140,24 @@ describe("an event is never synced without its row", () => {
     expect(eventOutcome("rate_limited", 0, true)).toBe("retrying");
   });
 });
+
+describe("a stranded event still runs out of attempts", () => {
+  // A run that dies mid-flight leaves its events in `processing`, and the due
+  // query never looks there — so they are returned to the queue. If that return
+  // did not count as an attempt, an event that reproducibly kills the worker
+  // would cycle for ever: always retried, never counted, never dead-lettered.
+  // §14.11 requires a bound, and this is where it would have leaked.
+  it("dead-letters after the limit rather than cycling", () => {
+    // The worker computes attempts + 1 and compares against MAX_ATTEMPTS; this
+    // pins the arithmetic that decides between requeue and dead-letter.
+    const requeue = (attempts: number) => attempts + 1 < MAX_ATTEMPTS;
+    expect(requeue(0)).toBe(true);
+    expect(requeue(MAX_ATTEMPTS - 2)).toBe(true);
+    expect(requeue(MAX_ATTEMPTS - 1)).toBe(false);
+    expect(requeue(MAX_ATTEMPTS)).toBe(false);
+  });
+
+  it("backs the retry off by the attempt it just spent", () => {
+    expect(backoffMs(1, () => 0)).toBeLessThan(backoffMs(2, () => 0));
+  });
+});

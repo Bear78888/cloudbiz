@@ -30,6 +30,13 @@ const SHEETS_API = "https://sheets.googleapis.com/v4/spreadsheets";
 /** How many events one run takes. Bounded so a backlog cannot stall a request. */
 const BATCH_SIZE = 200;
 
+/**
+ * How long an event may sit in `processing` before it is treated as stranded.
+ * Long enough that a slow but live run is never interrupted; short enough that
+ * a crash costs one cron cycle, not a day.
+ */
+const STUCK_AFTER_MS = 15 * 60 * 1000;
+
 export interface SyncRunResult {
   claimed: number;
   synced: number;
@@ -112,12 +119,39 @@ export async function runSyncForOrganization(organizationId: string): Promise<Sy
   // Events left in `processing` by a run that died mid-flight would never be
   // picked up again: the due query only looks at pending/retrying. Return them
   // to the queue rather than letting a crash silently strand a change.
-  await admin
+  //
+  // The attempt counter has to move with them. An event that kills the worker
+  // every time it is picked up would otherwise cycle for ever — always retried,
+  // never counted, never dead-lettered — which is precisely the unbounded loop
+  // §14.11 forbids. Counting the attempt means a reproducibly fatal event ends
+  // up in `failed`, where someone can see it.
+  const { data: stuck, error: stuckError } = await admin
     .from("sync_outbox")
-    .update({ status: "pending" })
+    .select("id, attempts")
     .eq("organization_id", organizationId)
     .eq("status", "processing")
-    .lt("updated_at", new Date(Date.now() - 15 * 60 * 1000).toISOString());
+    .lt("updated_at", new Date(Date.now() - STUCK_AFTER_MS).toISOString());
+
+  if (stuckError) {
+    console.error("[google] could not look for stranded events:", stuckError.message);
+  }
+
+  for (const event of stuck ?? []) {
+    const attempts = event.attempts + 1;
+    const exhausted = attempts >= MAX_ATTEMPTS;
+    const { error } = await admin
+      .from("sync_outbox")
+      .update({
+        status: exhausted ? "failed" : "pending",
+        attempts,
+        last_error: "stuck_processing",
+        next_attempt_at: new Date(Date.now() + backoffMs(attempts)).toISOString(),
+      })
+      .eq("id", event.id);
+    if (error) {
+      console.error("[google] could not requeue a stranded event:", error.message);
+    }
+  }
 
   const { data: due, error: dueError } = await admin
     .from("sync_outbox")
