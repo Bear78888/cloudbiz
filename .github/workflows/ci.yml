@@ -7,9 +7,63 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Manual re-run. Added after a pull_request event failed to start CI at all
+  # on PR #16: a pull request with no CI attached looks calmer than a red one
+  # and is worse, because there is nothing to notice. This gives a way to start
+  # the run without pushing a commit whose only purpose is to poke GitHub.
+  workflow_dispatch:
 
 jobs:
+  # Which jobs are worth running for this change.
+  #
+  # Plain git rather than a marketplace action: the rule is four greps, and a
+  # third-party action in the one workflow that gates every merge is a
+  # supply-chain surface bought for no convenience.
+  #
+  # Anything that is not a pull request (a push to main, a manual re-run) runs
+  # everything. Skipping work on a guess is only safe when the guess is cheap
+  # to check, and on main it is not.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+      envconfig: ${{ steps.filter.outputs.envconfig }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: filter
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+            echo "envconfig=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          base=$(git merge-base "${{ github.event.pull_request.base.sha }}" HEAD)
+          files=$(git diff --name-only "$base" HEAD)
+          echo "Changed files:"; echo "$files"
+
+          # Everything the end-to-end suite actually exercises. A PR touching
+          # only docs cannot break a browser test, and spending three minutes
+          # of Docker pulls to prove it is how the minutes ran out.
+          if echo "$files" | grep -Eq '^(src/|supabase/|tests/|playwright\.config\.ts|next\.config\.ts|package\.json|package-lock\.json|\.github/workflows/)'; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "code=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          # The no-env build only proves one thing: the public site still
+          # builds when no platform variables are set. Only env and build
+          # configuration can change that answer.
+          if echo "$files" | grep -Eq '^(next\.config\.ts|src/lib/env/|package\.json|package-lock\.json)'; then
+            echo "envconfig=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "envconfig=false" >> "$GITHUB_OUTPUT"
+          fi
+
   checks:
+    needs: changes
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,8 +74,8 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
-      - name: Build (public-site mode, no env)
-        run: npm run build
+      # The platform build compiles every route, so it is the one that catches
+      # ordinary breakage; it always runs.
       - name: Build (platform mode, synthetic env)
         run: npm run build
         env:
@@ -31,6 +85,13 @@ jobs:
           NEXT_PUBLIC_SUPABASE_ANON_KEY: synthetic-anon-key
           SUPABASE_PROJECT_REF: whwzfdkdxyycsvyvyxdn
           SUPABASE_SERVICE_ROLE_KEY: synthetic-service-key
+
+      # The second build answers a narrower question — does the public site
+      # still build with no platform env at all — and only env or build config
+      # can change that answer.
+      - name: Build (public-site mode, no env)
+        if: needs.changes.outputs.envconfig == 'true'
+        run: npm run build
 
   rls:
     runs-on: ubuntu-latest
@@ -68,6 +129,8 @@ jobs:
   # activity triggers are all in the loop. Still no secrets: the local stack's
   # keys are fixed development values printed by `supabase status`.
   e2e:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -98,8 +161,22 @@ jobs:
       - name: Build
         run: npm run build
 
+      # The browser download is ~180 MB and unchanged between runs; only the
+      # apt libraries have to be put back on a fresh runner each time.
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
       - name: Install Chromium
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: npx playwright install --with-deps chromium
+
+      - name: Install Chromium system libraries
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
 
       - name: Run end-to-end tests
         run: npm run test:e2e
