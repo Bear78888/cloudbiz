@@ -308,6 +308,11 @@ jobs:
              from pg_proc p join pg_roles r on r.oid = p.proowner
              join pg_namespace n on n.oid = p.pronamespace
              where n.nspname = 'public' and p.proname in ('create_organization','import_jobs');" || true
+          # GoTrue's own log, not just the browser's notice. A failed auth
+          # request (e.g. the mailer choking on a template) shows only a
+          # generic message client-side; the reason lives in this container.
+          docker ps -a --filter "name=auth" || true
+          docker logs "$(docker ps -a --filter 'name=auth' --format '{{.Names}}' | head -1)" --tail 200 || true
 
       - name: Stop the stack
         if: always()
