@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 
 import { changeEstimateStatusAction } from "@/features/estimates/actions";
 import { EstimateEditor } from "@/features/estimates/EstimateEditor";
-import { isReleased } from "@/features/estimates/model";
+import { isEditable, isReleased } from "@/features/estimates/model";
 import { getEstimate } from "@/features/estimates/service";
 import { getCurrentMembership } from "@/features/organizations/service";
 import { formatDate, formatMoney } from "@/lib/datetime";
@@ -228,7 +228,9 @@ export default async function EstimatePage({
         </p>
       </section>
 
-      {released ? (
+      {/* Not `!released`: an expired estimate was never released and is still
+          not editable — nothing leads out of `expired` (§25.3). */}
+      {!isEditable(estimate.status) ? (
         <ReadOnlyEstimate estimate={estimate} dict={dict} locale={l} currency={currency} />
       ) : (
         <EstimateEditor

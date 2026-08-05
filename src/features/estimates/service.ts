@@ -10,7 +10,7 @@ import {
   canTransition,
   computeTotals,
   contentBlockers,
-  isReleased,
+  isEditable,
   jobStatusForEstimate,
   type EstimateItemType,
   type EstimateStatus,
@@ -228,7 +228,7 @@ export async function saveEstimateDraft(
     "estimates:status-before-edit",
   );
   if (!current) return { ok: false, error: "not_found" };
-  if (isReleased(current.status as EstimateStatus)) return { ok: false, error: "already_sent" };
+  if (!isEditable(current.status as EstimateStatus)) return { ok: false, error: "already_sent" };
 
   const totals = computeTotals(input.items, input.taxRate);
 

@@ -65,6 +65,19 @@ export function isReleased(status: EstimateStatus): boolean {
   return status === "sent" || status === "viewed" || status === "accepted" || status === "rejected";
 }
 
+/**
+ * Whether the lines and prices may still be changed.
+ *
+ * Deliberately not `!isReleased`: `expired` was never released and is still not
+ * editable, because nothing leads out of it in `TRANSITIONS`. Saving an expired
+ * estimate would revive it as a draft and quietly contradict the state machine
+ * — the revision of an expired estimate is a new version, like every other
+ * revision (§25.3).
+ */
+export function isEditable(status: EstimateStatus): boolean {
+  return status === "draft" || status === "ready";
+}
+
 export interface LineItemInput {
   itemType: EstimateItemType;
   description: string;

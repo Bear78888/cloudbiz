@@ -5,6 +5,7 @@ import {
   blockersForSending,
   canTransition,
   computeTotals,
+  isEditable,
   isEstimateStatus,
   isReleased,
   jobStatusForEstimate,
@@ -60,6 +61,31 @@ describe("what may follow what", () => {
     expect(isReleased("ready")).toBe(false);
     expect(isReleased("sent")).toBe(true);
     expect(isReleased("accepted")).toBe(true);
+  });
+
+  // `expired` was never released, so `!isReleased` would have called it
+  // editable — and saving it would have revived it as a draft, contradicting
+  // the state machine that says nothing leads out of `expired`.
+  it("does not let an expired estimate be edited back to life", () => {
+    expect(isReleased("expired")).toBe(false);
+    expect(isEditable("expired")).toBe(false);
+  });
+
+  // The implication runs one way only. `sent` can still move — to accepted,
+  // rejected or expired — but its lines and prices are fixed, so "has a way
+  // forward" does not imply editable. What must hold is the contrapositive:
+  // a status with nowhere to go is a status nothing can be written to.
+  it("never lets a terminal status be edited", () => {
+    for (const status of ESTIMATE_STATUSES) {
+      const hasWayForward = ESTIMATE_STATUSES.some(
+        (next) => next !== status && canTransition(status, next),
+      );
+      if (!hasWayForward) expect(isEditable(status)).toBe(false);
+    }
+  });
+
+  it("allows editing only before the customer is involved", () => {
+    expect(ESTIMATE_STATUSES.filter(isEditable)).toEqual(["draft", "ready"]);
   });
 
   it("can expire from anything not yet answered", () => {
