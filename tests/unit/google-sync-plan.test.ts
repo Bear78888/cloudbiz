@@ -4,6 +4,7 @@ import {
   MAX_ATTEMPTS,
   backoffMs,
   columnLetter,
+  eventOutcome,
   nextOutcome,
   planWrites,
   rowRange,
@@ -112,5 +113,30 @@ describe("A1 ranges", () => {
   it("quotes tab titles so spaces and apostrophes survive", () => {
     expect(rowRange("Jobs", 5, 24)).toBe("'Jobs'!A5:X5");
     expect(rowRange("Bob's Jobs", 2, 3)).toBe("'Bob''s Jobs'!A2:C2");
+  });
+});
+
+describe("an event is never synced without its row", () => {
+  // The bug this exists for: a query asked for a column that does not exist,
+  // PostgREST answered 400, the error was discarded, no rows were built — and
+  // every event was marked synced. The queue said "up to date" while the job
+  // had never reached the spreadsheet. Silent loss reported as success is
+  // worse than a visible failure, because nothing prompts anyone to look.
+  it("treats a missing row as a failure, not a success", () => {
+    expect(eventOutcome(null, 0, false)).toBe("retrying");
+    expect(eventOutcome(null, MAX_ATTEMPTS - 1, false)).toBe("failed");
+  });
+
+  it("still syncs an event whose row was built", () => {
+    expect(eventOutcome(null, 0, true)).toBe("synced");
+  });
+
+  // A real transport failure keeps its own meaning: the row may well have been
+  // built, and reconnect-worthy failures must not be downgraded to a retry.
+  it("does not let the guard mask the real failure", () => {
+    expect(eventOutcome("unauthorized", 0, true)).toBe("disconnected");
+    expect(eventOutcome("unauthorized", 0, false)).toBe("disconnected");
+    expect(eventOutcome("not_found", 0, false)).toBe("disconnected");
+    expect(eventOutcome("rate_limited", 0, true)).toBe("retrying");
   });
 });
