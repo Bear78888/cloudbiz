@@ -7,6 +7,7 @@ import { getCurrentMembership } from "@/features/organizations/service";
 import { getDict } from "@/lib/i18n";
 import { isLocale, type Locale } from "@/lib/routes";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { must } from "@/lib/supabase/query";
 
 export const dynamic = "force-dynamic";
 
@@ -71,12 +72,15 @@ export default async function GoogleSettingsPage({
     messageFor(dict, reason) ??
     (connection?.problem ? messageFor(dict, connection.problem) : null);
 
-  const { data: spreadsheet } = await supabase
+  const spreadsheet = await must(
+    supabase
     .from("google_spreadsheets")
     .select("spreadsheet_id, spreadsheet_name, last_successful_sync_at, status")
     .eq("organization_id", membership.organizationId)
     .eq("status", "active")
-    .maybeSingle();
+    .maybeSingle(),
+    "page:spreadsheet",
+  );
 
   const { count: pendingChanges } = await supabase
     .from("sync_outbox")

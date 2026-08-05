@@ -154,7 +154,7 @@ describe("customer rows", () => {
         leadSource: "referral",
         firstJobDate: "2026-01-05T12:00:00Z",
         lastJobDate: "2026-08-04T12:00:00Z",
-        totalJobs: 4,
+        totalJobs: null,
         totalRevenue: "1250.5",
         notes: null,
         updatedAt: "2026-08-04T18:35:00Z",
@@ -163,7 +163,7 @@ describe("customer rows", () => {
     );
     expect(row[0]).toBe("22222222-2222-2222-2222-222222222222");
     expect(row).toHaveLength(headerRow("customers", "en").length);
-    expect(row[9]).toBe("4");
+    expect(row[9]).toBe("");
     expect(row[10]).toBe("1250.50");
     expect(row[7]).toBe("2026-01-05");
   });
@@ -198,5 +198,39 @@ describe("sheet schema", () => {
       .flat()
       .join("\n");
     expect(es).toContain("Edita los trabajos en HandyAlliance. Esta hoja se actualiza automáticamente.");
+  });
+});
+
+describe("columns with no source behind them", () => {
+  // The rule, learned the hard way: a customer with one job showed "Total
+  // Jobs: 0" because the aggregate did not exist yet. Zero reads as a fact.
+  // An empty cell reads as "not known", which is the truth.
+  it("leaves an aggregate blank rather than writing zero", () => {
+    const base = {
+      id: "c1",
+      name: "Ana",
+      phone: null,
+      email: null,
+      preferredLocale: null,
+      address: null,
+      leadSource: null,
+      firstJobDate: null,
+      lastJobDate: null,
+      totalJobs: null,
+      totalRevenue: null,
+      notes: null,
+      updatedAt: "2026-08-04T18:35:00Z",
+    };
+    expect(customerToRow(base, context)[9]).toBe("");
+    expect(customerToRow({ ...base, totalJobs: 4 }, context)[9]).toBe("4");
+  });
+
+  // The link used to fall back to a hardcoded domain and wrote a dead URL into
+  // a real customer's sheet. A plausible wrong value is worse than none.
+  it("omits the link when the deployment address is unknown", () => {
+    expect(jobToRow(job, { ...context, appUrl: null })[22]).toBe("");
+    expect(jobToRow(job, { ...context, appUrl: "https://preview.example" })[22]).toBe(
+      `https://preview.example/en/app/jobs/${job.id}`,
+    );
   });
 });

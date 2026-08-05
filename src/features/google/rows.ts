@@ -43,7 +43,8 @@ export interface CustomerRowInput {
   leadSource: string | null;
   firstJobDate: string | null;
   lastJobDate: string | null;
-  totalJobs: number;
+  /** Null until the Customers screen supplies aggregates (§14.7.2). */
+  totalJobs: number | null;
   totalRevenue: string | number | null;
   notes: string | null;
   updatedAt: string;
@@ -119,8 +120,12 @@ function dateOnly(value: string | null | undefined, timeZone: string): string {
 export interface RowContext {
   timeZone: string;
   locale: "en" | "es";
-  /** Absolute base, e.g. https://handyalliance.com — the sheet is read elsewhere. */
-  appUrl: string;
+  /**
+   * Absolute base for links leaving the app. Null when the deployment could
+   * not be identified — the link column is then left empty rather than filled
+   * with a guess that looks right and goes nowhere.
+   */
+  appUrl: string | null;
   /** Display labels for the stable codes (§13.6); the sheet shows words. */
   statusLabels: Record<string, string>;
   paymentStatusLabels: Record<string, string>;
@@ -156,7 +161,7 @@ export function jobToRow(job: JobRowInput, context: RowContext): string[] {
     dateOnly(job.lastFollowUpAt, context.timeZone),
     job.reviewRequestedAt ? "TRUE" : "FALSE",
     sheetCell(job.notes),
-    `${context.appUrl}/${context.locale}/app/jobs/${job.id}`,
+    context.appUrl ? `${context.appUrl}/${context.locale}/app/jobs/${job.id}` : "",
     // §14.12: a deleted job stays in the sheet, marked. Removing the row would
     // take away the record the owner may still be looking at.
     job.deletedAt ? "TRUE" : "FALSE",
@@ -176,7 +181,10 @@ export function customerToRow(customer: CustomerRowInput, context: RowContext): 
       : "",
     dateOnly(customer.firstJobDate, context.timeZone),
     dateOnly(customer.lastJobDate, context.timeZone),
-    String(customer.totalJobs),
+    // Empty, not "0". A column with no source behind it stays blank: zero
+    // reads as a fact, and "this customer has had 0 jobs" is a claim we
+    // cannot make while the aggregates do not exist (§14.7.2).
+    customer.totalJobs === null ? "" : String(customer.totalJobs),
     money(customer.totalRevenue),
     sheetCell(customer.notes),
     dateTime(customer.updatedAt, context.timeZone),

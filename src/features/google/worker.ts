@@ -1,5 +1,6 @@
 import "server-only";
 
+import { resolveAppUrl } from "@/lib/app-url";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import {
   JOB_STATUSES,
@@ -12,7 +13,7 @@ import type { Locale } from "@/lib/routes";
 
 import { customerToRow, jobToRow, type RowContext } from "./rows";
 import { getAccessTokenForOrganization, markConnectionNeedsReconnect } from "./service";
-import { headerRow, tabTitle } from "./sheet-schema";
+import { headerRow, readMeRows, tabTitle } from "./sheet-schema";
 import { type SheetsFailure } from "./sheets";
 import { MAX_ATTEMPTS, backoffMs, eventOutcome, planWrites, rowRange } from "./sync-plan";
 
@@ -82,24 +83,43 @@ export async function runSyncForOrganization(organizationId: string): Promise<Sy
   };
   const admin = createSupabaseAdminClient();
 
-  const { data: sheet } = await admin
+  const { data: sheet, error: sheetError } = await admin
     .from("google_spreadsheets")
     .select("id, spreadsheet_id, tab_mapping")
     .eq("organization_id", organizationId)
     .eq("status", "active")
     .maybeSingle();
+  if (sheetError) {
+    console.error("[google] spreadsheet lookup failed:", sheetError.message);
+    return { ...empty, reason: "no_spreadsheet" };
+  }
   if (!sheet) return { ...empty, reason: "no_spreadsheet" };
 
-  const { data: organization } = await admin
+  const { data: organization, error: organizationError } = await admin
     .from("organizations")
     .select("default_locale, timezone")
     .eq("id", organizationId)
     .maybeSingle();
 
+  if (organizationError) {
+    console.error("[google] organization lookup failed:", organizationError.message);
+    return { ...empty, reason: "no_spreadsheet" };
+  }
+
   const locale = ((organization?.default_locale as Locale) ?? "en") satisfies Locale;
   const timeZone = (organization?.timezone as string) ?? "America/New_York";
 
-  const { data: due } = await admin
+  // Events left in `processing` by a run that died mid-flight would never be
+  // picked up again: the due query only looks at pending/retrying. Return them
+  // to the queue rather than letting a crash silently strand a change.
+  await admin
+    .from("sync_outbox")
+    .update({ status: "pending" })
+    .eq("organization_id", organizationId)
+    .eq("status", "processing")
+    .lt("updated_at", new Date(Date.now() - 15 * 60 * 1000).toISOString());
+
+  const { data: due, error: dueError } = await admin
     .from("sync_outbox")
     .select("id, entity_type, entity_id, attempts")
     .eq("organization_id", organizationId)
@@ -108,6 +128,10 @@ export async function runSyncForOrganization(organizationId: string): Promise<Sy
     .order("created_at", { ascending: true })
     .limit(BATCH_SIZE);
 
+  if (dueError) {
+    console.error("[google] outbox lookup failed:", dueError.message);
+    return { ...empty, reason: "nothing_due" };
+  }
   if (!due || due.length === 0) return { ...empty, reason: "nothing_due" };
 
   const token = await getAccessTokenForOrganization(organizationId);
@@ -137,7 +161,7 @@ export async function runSyncForOrganization(organizationId: string): Promise<Sy
   const context: RowContext = {
     timeZone,
     locale,
-    appUrl: process.env.NEXT_PUBLIC_APP_URL ?? "https://handyalliance.com",
+    appUrl: resolveAppUrl(),
     ...labelsFor(locale),
   };
 
@@ -255,7 +279,7 @@ export async function runSyncForOrganization(organizationId: string): Promise<Sy
             // wrong number now would be worse than leaving the column empty.
             firstJobDate: null,
             lastJobDate: null,
-            totalJobs: 0,
+            totalJobs: null,
             totalRevenue: null,
             notes: (customer.notes as string | null) ?? null,
             updatedAt: customer.updated_at as string,
@@ -331,18 +355,40 @@ export async function runSyncForOrganization(organizationId: string): Promise<Sy
   }
 
   if (failure === null) {
+    const syncedAt = new Date().toISOString();
     await admin
       .from("google_spreadsheets")
-      .update({ last_successful_sync_at: new Date().toISOString(), last_error: null })
+      .update({ last_successful_sync_at: syncedAt, last_error: null })
       .eq("id", sheet.id as string);
+
+    // §14.7.7: Read Me carries the last sync time. It used to be written once
+    // at creation and never again, so a sheet that was syncing fine still said
+    // "Not yet" — and that tab is the first place someone looks when they think
+    // sync is broken. The settings screen showing the right value does not help
+    // a person who is staring at the spreadsheet.
+    const readMeTitle = tabTitle("readme", locale);
+    await writeReadMe(
+      spreadsheetId,
+      readMeTitle in tabMapping ? readMeTitle : readMeTitle,
+      readMeRows({
+        locale,
+        dashboardUrl: context.appUrl ? `${context.appUrl}/${locale}/app` : "",
+        lastSyncedAt: dateForReadMe(syncedAt, timeZone),
+      }),
+      token.accessToken,
+    );
   } else if (failure === "unauthorized") {
-    const { data: connection } = await admin
+    const { data: connection, error: connectionError } = await admin
       .from("google_connections")
       .select("id")
       .eq("organization_id", organizationId)
       .eq("status", "active")
       .maybeSingle();
-    if (connection) await markConnectionNeedsReconnect(connection.id as string, "reconnect_required");
+    if (connectionError) {
+      console.error("[google] could not find the connection to flag:", connectionError.message);
+    } else if (connection) {
+      await markConnectionNeedsReconnect(connection.id, "reconnect_required");
+    }
   } else if (failure === "not_found") {
     // §14.14: the spreadsheet is gone. The data is not, and the settings screen
     // says exactly that.
@@ -426,3 +472,49 @@ async function writeRows(
 }
 
 export { MAX_ATTEMPTS };
+
+/** Read Me shows the organization's wall clock, like every other date (§25.1). */
+function dateForReadMe(iso: string, timeZone: string): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone,
+  }).formatToParts(new Date(iso));
+  const found: Record<string, string> = {};
+  for (const part of parts) if (part.type !== "literal") found[part.type] = part.value;
+  const hour = found.hour === "24" ? "00" : found.hour;
+  return `${found.year}-${found.month}-${found.day} ${hour}:${found.minute}`;
+}
+
+/**
+ * Rewrites the Read Me tab. Best effort on purpose: the rows are already in the
+ * sheet and the events are already recorded, so failing here must not turn a
+ * successful sync into a retry that writes every row again.
+ */
+async function writeReadMe(
+  spreadsheetId: string,
+  title: string,
+  rows: string[][],
+  accessToken: string,
+): Promise<void> {
+  const range = `'${title.replace(/'/g, "''")}'!A1`;
+  try {
+    const response = await fetch(
+      `${SHEETS_API}/${encodeURIComponent(spreadsheetId)}/values/${encodeURIComponent(range)}?valueInputOption=RAW`,
+      {
+        method: "PUT",
+        headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ values: rows }),
+      },
+    );
+    if (!response.ok) {
+      console.error("[google] could not refresh the Read Me tab:", response.status);
+    }
+  } catch {
+    console.error("[google] could not refresh the Read Me tab: network error");
+  }
+}

@@ -2,6 +2,8 @@ import "server-only";
 
 import { createClient } from "@supabase/supabase-js";
 
+import type { Database } from "@/lib/supabase/database.types";
+
 import { getPlatformEnvironment } from "@/lib/env/server";
 import { resolveSupabaseAdminUrl } from "@/lib/supabase/target";
 
@@ -22,7 +24,7 @@ export function createSupabaseAdminClient() {
     process.env.HANDYALLIANCE_SUPABASE_SERVICE_ROLE_KEY ||
     environment.SUPABASE_SERVICE_ROLE_KEY;
 
-  return createClient(projectUrl, secretKey, {
+  return createClient<Database>(projectUrl, secretKey, {
     auth: {
       autoRefreshToken: false,
       persistSession: false,

@@ -6,6 +6,7 @@ import { getCurrentMembership } from "@/features/organizations/service";
 import { getDict } from "@/lib/i18n";
 import { isLocale, type Locale } from "@/lib/routes";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { must } from "@/lib/supabase/query";
 
 export const dynamic = "force-dynamic";
 
@@ -39,11 +40,14 @@ export default async function BillingPage({
   if (!membership) notFound();
   if (membership.role !== "owner") redirect(`/${l}/app`);
 
-  const { data: subscriptionRows } = await supabase
+  const subscriptionRows = await must(
+    supabase
     .from("subscriptions")
     .select("product_code, status")
     .eq("organization_id", membership.organizationId)
-    .in("status", ["active", "trialing", "past_due"]);
+    .in("status", ["active", "trialing", "past_due"]),
+    "page:subscriptionRows",
+  );
   const activeCodes = (subscriptionRows ?? []).map((s) => s.product_code as string);
 
   return (

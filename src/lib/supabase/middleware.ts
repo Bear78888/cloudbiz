@@ -1,4 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
+
+import type { Database } from "@/lib/supabase/database.types";
 import { NextResponse, type NextRequest } from "next/server";
 
 import { validateEnvironment } from "@/lib/env/schema";
@@ -30,7 +32,7 @@ export async function updateSession(request: NextRequest): Promise<SessionResult
     return { response, userId: null, authConfigured: false };
   }
 
-  const supabase = createServerClient(
+  const supabase = createServerClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL as string,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string,
     {

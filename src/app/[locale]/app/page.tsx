@@ -9,6 +9,7 @@ import { PRODUCTS } from "@/lib/config";
 import { getDict } from "@/lib/i18n";
 import { isLocale, type Locale } from "@/lib/routes";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { must } from "@/lib/supabase/query";
 
 export const dynamic = "force-dynamic";
 
@@ -43,10 +44,13 @@ export default async function DashboardPage({
   // Layout guarantees membership; keep a guard for direct rendering edge cases.
   if (!membership) notFound();
 
-  const { data: entitlementRows } = await supabase
+  const entitlementRows = await must(
+    supabase
     .from("entitlements")
     .select("feature_code, status")
-    .eq("organization_id", membership.organizationId);
+    .eq("organization_id", membership.organizationId),
+    "page:entitlementRows",
+  );
   const entitlements = entitlementRows ?? [];
   const isActive = (code: string) =>
     entitlements.some((e) => e.feature_code === code && e.status === "active");

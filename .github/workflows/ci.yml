@@ -73,6 +73,27 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run typecheck
+
+      # A bare `const { data } = await supabase...` discards the error, so a
+      # failed query and an empty result become the same value. That has cost
+      # three defects (onboarding loop, lost sheet row, every job edit), and a
+      # comment asking people to check `error` demonstrably did not hold — one
+      # of the three was written after the comment. So it is a build failure.
+      - name: No unchecked Supabase reads
+        run: |
+          set -uo pipefail
+          hits=$(grep -rn --include=\*.ts --include=\*.tsx \
+            -E 'const \{ data(: [A-Za-z_]+)? \} = await' src/ \
+            | grep -v 'error' \
+            | grep -vE '^[^:]+:[0-9]+: *(\*|//)' || true)
+          if [ -n "$hits" ]; then
+            echo "Unchecked Supabase read — use must()/maybe() from @/lib/supabase/query,"
+            echo "or destructure the error and handle it explicitly:"
+            echo "$hits"
+            exit 1
+          fi
+          echo "No unchecked Supabase reads."
+
       - run: npm test
       # The platform build compiles every route, so it is the one that catches
       # ordinary breakage; it always runs.
@@ -123,6 +144,22 @@ jobs:
           done
       - name: Run RLS isolation tests
         run: psql -h localhost -p 54322 -U postgres -d ha_test -v ON_ERROR_STOP=1 -f supabase/tests/rls_isolation_test.sql
+
+      # The generated types are checked against the schema the *migrations*
+      # produce, not against the live project: no secrets, and the thing that
+      # must not drift is exactly the migrations. Without this the types go
+      # stale after the first migration and become decoration.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Generate types from the migrated schema
+        run: |
+          npx supabase gen types typescript \
+            --db-url "postgresql://postgres:postgres@localhost:54322/ha_test" > /tmp/fresh.types.ts
+      - name: database.types.ts matches the migrations
+        run: node scripts/check-db-types.mjs /tmp/fresh.types.ts src/lib/supabase/database.types.ts
 
   # End-to-end (§37.3): a real browser against a real Next.js server and a real
   # Supabase — the CLI stack on the runner, so RLS, the auth server and the
