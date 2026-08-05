@@ -7,6 +7,11 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Manual re-run. Added after a pull_request event failed to start CI at all
+  # on PR #16: a pull request with no CI attached looks calmer than a red one
+  # and is worse, because there is nothing to notice. This gives a way to start
+  # the run without pushing a commit whose only purpose is to poke GitHub.
+  workflow_dispatch:
 
 jobs:
   checks:
