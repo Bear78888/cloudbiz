@@ -767,6 +767,35 @@ begin
     raise exception 'FAIL(18i): an estimate was accepted with no accepted_at';
   end if;
 
+  -- 18j. The customer-facing link is served by code, never by the Data API.
+  --
+  -- The public page checks the token server-side with the service role, and the
+  -- reason that is not merely a preference is here: `anon` must not be able to
+  -- ask PostgREST for an estimate by token — or by anything else. A row filter
+  -- "where public_token = ..." would have been the obvious design and would
+  -- have let anyone probe the table with a `where` clause of their choosing.
+  perform set_config('request.jwt.claim.sub', '', true);
+  perform set_config('role', 'anon', true);
+  begin
+    perform 1 from public.estimates where public_token is not null limit 1;
+    raise exception 'FAIL(18j): anon can read estimates by token';
+  exception
+    when insufficient_privilege then null; -- expected: refused at the grant layer
+    when others then
+      if sqlerrm like 'FAIL(18j)%' then raise; end if;
+      raise;
+  end;
+
+  begin
+    perform 1 from public.estimate_items limit 1;
+    raise exception 'FAIL(18k): anon can read estimate items';
+  exception
+    when insufficient_privilege then null; -- expected
+    when others then
+      if sqlerrm like 'FAIL(18k)%' then raise; end if;
+      raise;
+  end;
+
   perform pg_temp.act_as_postgres();
   raise notice 'RLS isolation tests passed';
 end;

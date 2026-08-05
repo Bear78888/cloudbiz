@@ -6,6 +6,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { must } from "@/lib/supabase/query";
 
+import { expiryFor } from "./public-link";
 import {
   canTransition,
   computeTotals,
@@ -65,6 +66,12 @@ export interface EstimateDetail extends EstimateSummary {
   tax: string;
   /** A fraction, as stored — 0.0825 for 8.25%. */
   taxRate: number;
+  expiresAt: string | null;
+  /**
+   * The customer link's secret, shown to the owner so they can send it.
+   * Never rendered on any page a customer can reach.
+   */
+  publicToken: string | null;
   items: EstimateItemRow[];
 }
 
@@ -104,7 +111,7 @@ export async function getEstimate(
     supabase
       .from("estimates")
       .select(
-        "id, job_id, version, status, title, total, subtotal, tax, tax_rate, locale, scope, terms, created_at, sent_at",
+        "id, job_id, version, status, title, total, subtotal, tax, tax_rate, locale, scope, terms, created_at, sent_at, expires_at, public_token",
       )
       .eq("organization_id", organizationId)
       .eq("id", estimateId)
@@ -138,6 +145,8 @@ export async function getEstimate(
     terms: row.terms,
     createdAt: row.created_at,
     sentAt: row.sent_at,
+    expiresAt: row.expires_at,
+    publicToken: row.public_token,
     items: (items ?? []).map((item) => ({
       id: item.id,
       itemType: item.item_type as EstimateItemType,
@@ -292,7 +301,7 @@ export async function setEstimateStatus(
   const current = await must(
     supabase
       .from("estimates")
-      .select("status, job_id, total, title, public_token")
+      .select("status, job_id, total, title, public_token, expires_at")
       .eq("organization_id", organizationId)
       .eq("id", estimateId)
       .maybeSingle(),
@@ -335,11 +344,23 @@ export async function setEstimateStatus(
   // it is created: a token that exists on a draft is a URL that works before
   // anyone meant to share it. `estimates_sent_has_token` enforces the same
   // thing from the other side.
-  const token = next === "sent" && !current.public_token ? { public_token: newPublicToken() } : {};
+  //
+  // Withdrawing does the opposite and does it properly: the token is cleared,
+  // not merely ignored. A link that still resolves to a row and is refused by a
+  // status check is one forgotten branch away from working again; a link whose
+  // secret no longer exists in the database cannot be revived by a bug.
+  const link: Record<string, unknown> = {};
+  if (next === "sent") {
+    if (!current.public_token) link.public_token = newPublicToken();
+    if (!current.expires_at) link.expires_at = expiryFor(now);
+  }
+  if (next === "expired") {
+    link.public_token = null;
+  }
 
   const { error } = await supabase
     .from("estimates")
-    .update({ status: next, ...stamps, ...token })
+    .update({ status: next, ...stamps, ...link })
     .eq("organization_id", organizationId)
     .eq("id", estimateId);
   if (error) return { ok: false, error: error.message };
