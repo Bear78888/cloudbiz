@@ -643,6 +643,47 @@ export const en = {
       navBilling: "Billing",
     },
     /**
+     * Google Sheets sync (§14). Every message here answers "what do I do now",
+     * because a connection screen the user cannot act on is just a red box
+     * (§29). Reason codes come from `/api/google/callback`.
+     */
+    google: {
+      title: "Google Sheets",
+      subtitle: "Your jobs stay organized in HandyAlliance and sync automatically to your Google Sheet.",
+      notConnectedTitle: "Not connected yet",
+      notConnectedBody:
+        "Connect Google and HandyAlliance will keep a spreadsheet up to date for you — handy for sharing, printing, or wiring into other tools.",
+      connect: "Connect Google",
+      reconnect: "Reconnect Google",
+      connectedAs: "Connected as",
+      connectedSince: "Connected",
+      pendingChanges: "Changes waiting to sync",
+      statusActive: "Connected",
+      statusNeedsReconnect: "Needs reconnecting",
+      // Only what we ask for, in words a plumber can weigh (§8.2: no jargon).
+      scopeNote:
+        "HandyAlliance can only see the spreadsheet it creates for you. It cannot see the rest of your Google Drive.",
+      ownerOnly: "Only the owner can connect Google.",
+      messages: {
+        connected: "Google is connected.",
+        access_denied: "You cancelled the Google sign-in. Nothing changed.",
+        no_refresh_token:
+          "Google did not give us lasting access. Try connecting again and approve the request.",
+        insufficient_scope:
+          "HandyAlliance needs permission to create your spreadsheet. Try again and leave that permission ticked.",
+        owner_only: "Only the owner can connect Google.",
+        signed_out: "Your session ended before we finished. Sign in and try again.",
+        not_configured: "Google sync is not set up on this site yet.",
+        failed: "We could not connect to Google. Please try again.",
+        // The case that must never be a 500: the stored token cannot be read,
+        // so the only thing the user can do is connect again.
+        token_unreadable:
+          "Your Google connection can no longer be read. Please connect Google again — your HandyAlliance data is safe.",
+        reconnect_required:
+          "Your Google connection expired or was removed. Please connect Google again — your HandyAlliance data is safe.",
+      },
+    },
+    /**
      * Job Tracker (§13). `statuses`, `paymentStatuses`, `priorities`,
      * `leadSources` and `views` are the display layer of the stable codes in
      * `src/features/jobs/model.ts` (§13.6) — the codes never change, these

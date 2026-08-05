@@ -142,6 +142,17 @@ const integrationEnvironmentObject = platformEnvironmentObject.extend({
   GOOGLE_CLIENT_ID: z.string().min(1).optional(),
   GOOGLE_CLIENT_SECRET: z.string().min(1).optional(),
   GOOGLE_REDIRECT_URI: z.url().optional(),
+  // Browser-side key for the Google Picker (§14.4). It is public by nature —
+  // restricted by HTTP referrer, not by secrecy — but it has no NEXT_PUBLIC_
+  // prefix, so it does not reach the browser through `process.env`. The Picker
+  // component receives it as a prop from a server component instead. Named
+  // here so a missing value is a validation error rather than an undefined at
+  // the moment the user clicks "connect an existing sheet".
+  GOOGLE_PICKER_API_KEY: z.string().min(1).optional(),
+  // Not a routinely rotatable secret: it encrypts stored Google refresh
+  // tokens, so changing it makes every existing connection unreadable and
+  // forces every customer to reconnect by hand. See the launch checklist,
+  // where it is an explicit exception to the key rotation at the domain move.
   GOOGLE_TOKEN_ENCRYPTION_KEY: z.string().min(32).optional(),
   APP_ENCRYPTION_KEY: z.string().min(32).optional(),
   CRON_SECRET: z.string().min(16).optional(),
