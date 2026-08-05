@@ -723,6 +723,69 @@ export type Database = {
         };
         Relationships: [];
       };
+      outbound_emails: {
+        Row: {
+          id: string;
+          organization_id: string;
+          kind: string;
+          estimate_id: string | null;
+          job_id: string | null;
+          customer_id: string | null;
+          to_email: string;
+          subject: string;
+          locale: string;
+          provider: string;
+          provider_message_id: string | null;
+          status: string;
+          error: string | null;
+          sent_at: string | null;
+          delivered_at: string | null;
+          failed_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          kind: string;
+          estimate_id?: string | null;
+          job_id?: string | null;
+          customer_id?: string | null;
+          to_email: string;
+          subject: string;
+          locale?: string;
+          provider?: string;
+          provider_message_id?: string | null;
+          status?: string;
+          error?: string | null;
+          sent_at?: string | null;
+          delivered_at?: string | null;
+          failed_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          organization_id?: string;
+          kind?: string;
+          estimate_id?: string | null;
+          job_id?: string | null;
+          customer_id?: string | null;
+          to_email?: string;
+          subject?: string;
+          locale?: string;
+          provider?: string;
+          provider_message_id?: string | null;
+          status?: string;
+          error?: string | null;
+          sent_at?: string | null;
+          delivered_at?: string | null;
+          failed_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       profiles: {
         Row: {
           created_at: string;

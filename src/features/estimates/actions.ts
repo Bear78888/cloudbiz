@@ -13,6 +13,7 @@ import type { EstimateActionState } from "./action-state";
 import { isEstimateStatus, type EstimateStatus } from "./model";
 import { MAX_LINE_ITEMS, parseEstimateForm, type RawLineItem } from "./schema";
 import { createEstimateForJob, saveEstimateDraft, setEstimateStatus } from "./service";
+import { sendEstimateToCustomer } from "./send";
 
 /**
  * Server actions for the Estimate Maker (§16).
@@ -170,4 +171,41 @@ export async function changeEstimateStatusAction(formData: FormData): Promise<vo
     redirect(`/${locale}/app/jobs/${jobId}/estimates/${estimateId}?blocked=${result.error}`);
   }
   redirect(`/${locale}/app/jobs/${jobId}/estimates/${estimateId}`);
+}
+
+/**
+ * Sends the estimate to the customer by email (§16.9).
+ *
+ * The approval check lives in the service, not here: this action only knows
+ * which estimate and who is asking. A button is not permission.
+ */
+export async function sendEstimateAction(formData: FormData): Promise<void> {
+  const locale = localeFrom(formData);
+  const jobId = String(formData.get("job_id") ?? "").trim();
+  const estimateId = String(formData.get("estimate_id") ?? "").trim();
+
+  const { supabase, membership } = await requireContext();
+  if (!membership) redirect(`/${locale}/onboarding`);
+  if (!estimateId) redirect(`/${locale}/app/jobs`);
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const result = await sendEstimateToCustomer(supabase, membership.organizationId, estimateId, {
+    locale,
+    timeZone: membership.timezone,
+    currency: membership.currency,
+    actorId: user?.id ?? null,
+  });
+
+  if (result.ok) {
+    trackServerEvent("estimate_sent", { organization_id: membership.organizationId });
+  }
+
+  revalidatePath(`/${locale}/app/jobs/${jobId}`);
+  revalidatePath(`/${locale}/app/jobs/${jobId}/estimates/${estimateId}`);
+
+  const target = `/${locale}/app/jobs/${jobId}/estimates/${estimateId}`;
+  redirect(result.ok ? `${target}?sent=1` : `${target}?blocked=${result.error}`);
 }

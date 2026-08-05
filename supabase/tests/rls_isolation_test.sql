@@ -774,8 +774,63 @@ begin
   -- ask PostgREST for an estimate by token — or by anything else. A row filter
   -- "where public_token = ..." would have been the obvious design and would
   -- have let anyone probe the table with a `where` clause of their choosing.
+  -- 19. The delivery log (§16.9, foundation for §17.10).
+  --
+  -- Readable by the organization it belongs to and by nobody else, and not
+  -- writable from a browser at all: a delivery record the client could write
+  -- is a delivery record that proves nothing.
+  perform pg_temp.act_as_postgres();
+  insert into public.outbound_emails
+    (organization_id, kind, to_email, subject, locale, status, provider_message_id, sent_at)
+  values (org_a, 'estimate.sent', 'customer@example.test', 'Your estimate', 'en', 'sent', 'stub-1', now());
+
+  perform pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+  if not exists (select 1 from public.outbound_emails where organization_id = org_a) then
+    raise exception 'FAIL(19a): the organization cannot read its own delivery log';
+  end if;
+
+  perform pg_temp.act_as('00000000-0000-0000-0000-00000000000b');
+  if exists (select 1 from public.outbound_emails where organization_id = org_a) then
+    raise exception 'FAIL(19b): organization B can read organization A''s delivery log';
+  end if;
+
+  -- No insert policy and no insert grant: this is written by server code only.
+  mutation_blocked := false;
+  begin
+    insert into public.outbound_emails (organization_id, kind, to_email, subject)
+    values (org_b, 'estimate.sent', 'planted@example.test', 'Planted');
+  exception when others then
+    mutation_blocked := true;
+  end;
+  if not mutation_blocked then
+    raise exception 'FAIL(19c): a client could write its own delivery record';
+  end if;
+
+  -- 19d. "sent" has to mean something: an id and a time, or it is not sent.
+  perform pg_temp.act_as_postgres();
+  mutation_blocked := false;
+  begin
+    insert into public.outbound_emails (organization_id, kind, to_email, subject, status)
+    values (org_a, 'estimate.sent', 'x@example.test', 'No id', 'sent');
+  exception when check_violation then
+    mutation_blocked := true;
+  end;
+  if not mutation_blocked then
+    raise exception 'FAIL(19d): a message was recorded as sent with no provider id';
+  end if;
+
   perform set_config('request.jwt.claim.sub', '', true);
   perform set_config('role', 'anon', true);
+  begin
+    perform 1 from public.outbound_emails limit 1;
+    raise exception 'FAIL(19e): anon can read the delivery log';
+  exception
+    when insufficient_privilege then null; -- expected
+    when others then
+      if sqlerrm like 'FAIL(19e)%' then raise; end if;
+      raise;
+  end;
+
   begin
     perform 1 from public.estimates where public_token is not null limit 1;
     raise exception 'FAIL(18j): anon can read estimates by token';

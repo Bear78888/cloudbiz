@@ -220,6 +220,15 @@ jobs:
           done
           curl -sf http://127.0.0.1:4545/token > /dev/null
 
+      - name: Start the Resend stub
+        run: |
+          node tests/e2e/resend-stub.mjs &
+          for _ in $(seq 1 20); do
+            curl -sf http://127.0.0.1:4546/__stub/health > /dev/null && break
+            sleep 0.5
+          done
+          curl -sf http://127.0.0.1:4546/__stub/health > /dev/null
+
       - name: Point Google at the stub
         run: |
           {
@@ -231,6 +240,12 @@ jobs:
             echo "GOOGLE_TOKEN_ENCRYPTION_KEY=aGFuZHlhbGxpYW5jZS1jaS1zdHViLWtleS0wMDAwMDA="
             echo "CRON_SECRET=stub-cron-secret"
             echo "SHEETS_STUB_STATE=/tmp/sheets-stub.json"
+            # Email goes to the stub, never to Resend. The key is a placeholder
+            # the stub only checks the shape of; no secret is involved.
+            echo "RESEND_API_BASE=http://127.0.0.1:4546"
+            echo "RESEND_API_KEY=stub-resend-key"
+            echo "RESEND_FROM_EMAIL=noreply@handyalliance.test"
+            echo "RESEND_STUB_STATE=/tmp/resend-stub.json"
           } >> "$GITHUB_ENV"
 
       - name: Build
