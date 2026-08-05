@@ -7,6 +7,7 @@ import { createStripeClient } from "@/features/billing/stripe";
 import { getCurrentMembership } from "@/features/organizations/service";
 import { checkServerEnvironment } from "@/lib/env/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { must } from "@/lib/supabase/query";
 
 export const runtime = "nodejs";
 
@@ -50,11 +51,14 @@ export async function POST(request: NextRequest) {
   }
 
   // RLS lets the owner read their org's subscription cache.
-  const { data: existingSubscriptions } = await supabase
+  const existingSubscriptions = await must(
+    supabase
     .from("subscriptions")
     .select("product_code, status, stripe_customer_id")
     .eq("organization_id", membership.organizationId)
-    .in("status", ["active", "trialing", "past_due"]);
+    .in("status", ["active", "trialing", "past_due"]),
+    "route:existingSubscriptions",
+  );
   const active = existingSubscriptions ?? [];
 
   if (active.some((s) => s.product_code === productCode)) {

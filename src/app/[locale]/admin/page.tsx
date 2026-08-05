@@ -5,6 +5,7 @@ import { getDict } from "@/lib/i18n";
 import { isLocale, type Locale } from "@/lib/routes";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { must } from "@/lib/supabase/query";
 
 export const dynamic = "force-dynamic";
 
@@ -46,11 +47,14 @@ export default async function AdminPage({
   if (!user) notFound();
 
   // Layer 2: RLS admin_roles_self_select — a non-admin sees zero rows.
-  const { data: selfRole } = await supabase
+  const selfRole = await must(
+    supabase
     .from("admin_roles")
     .select("role, is_active")
     .eq("profile_id", user.id)
-    .maybeSingle();
+    .maybeSingle(),
+    "page:selfRole",
+  );
   if (!selfRole?.is_active) notFound();
 
   // Layer 3: re-verify with the elevated client before using it.
@@ -63,11 +67,14 @@ export default async function AdminPage({
     .maybeSingle();
   if (!verify.data) notFound();
 
-  const { data: organizations } = await admin
+  const organizations = await must(
+    admin
     .from("organizations")
     .select("name, trade, status, created_at")
     .order("created_at", { ascending: false })
-    .limit(50);
+    .limit(50),
+    "page:organizations",
+  );
   const rows = organizations ?? [];
 
   return (

@@ -190,24 +190,38 @@ export async function getAccessTokenForOrganization(
   if (!clientId || !clientSecret) return { ok: false, reason: "not_configured" };
 
   const admin = createSupabaseAdminClient();
-  const { data, error } = await admin
+  // Two plain reads, no embedded select. This was the last embed left in the
+  // codebase and it is gone for the same reason as the other two: an embed
+  // resolves through PostgREST's schema cache, and when that resolution fails
+  // the whole query fails — indistinguishable, to careless code, from "no
+  // rows". `Relationships: []` in the generated types now makes any new embed
+  // a compile error rather than a runtime surprise.
+  const { data: connection, error: connectionError } = await admin
     .from("google_connections")
-    .select("id, google_oauth_tokens (encrypted_refresh_token)")
+    .select("id")
     .eq("organization_id", organizationId)
     .eq("status", "active")
     .maybeSingle();
 
-  if (error) {
-    console.error("[google] token lookup failed:", error.message);
+  if (connectionError) {
+    console.error("[google] connection lookup failed:", connectionError.message);
     return { ok: false, reason: "transient" };
   }
-  if (!data) return { ok: false, reason: "no_connection" };
+  if (!connection) return { ok: false, reason: "no_connection" };
 
-  const connectionId = data.id as string;
-  const tokenRows = data.google_oauth_tokens as { encrypted_refresh_token: string }[] | null;
-  const ciphertext = Array.isArray(tokenRows)
-    ? tokenRows[0]?.encrypted_refresh_token
-    : (tokenRows as { encrypted_refresh_token: string } | null)?.encrypted_refresh_token;
+  const connectionId = connection.id;
+  const { data: tokenRow, error: tokenError } = await admin
+    .from("google_oauth_tokens")
+    .select("encrypted_refresh_token")
+    .eq("connection_id", connectionId)
+    .maybeSingle();
+
+  if (tokenError) {
+    console.error("[google] token lookup failed:", tokenError.message);
+    return { ok: false, reason: "transient" };
+  }
+
+  const ciphertext = tokenRow?.encrypted_refresh_token;
 
   if (!ciphertext) {
     await markConnectionNeedsReconnect(connectionId, "reconnect_required");

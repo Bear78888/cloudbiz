@@ -5,6 +5,7 @@ import { createStripeClient } from "@/features/billing/stripe";
 import { getCurrentMembership } from "@/features/organizations/service";
 import { checkServerEnvironment } from "@/lib/env/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { must } from "@/lib/supabase/query";
 
 export const runtime = "nodejs";
 
@@ -35,12 +36,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "owner_role_required" }, { status: 403 });
   }
 
-  const { data: subscription } = await supabase
+  const subscription = await must(
+    supabase
     .from("subscriptions")
     .select("stripe_customer_id")
     .eq("organization_id", membership.organizationId)
     .limit(1)
-    .maybeSingle();
+    .maybeSingle(),
+    "route:subscription",
+  );
   if (!subscription?.stripe_customer_id) {
     return NextResponse.json({ error: "no_billing_account" }, { status: 404 });
   }

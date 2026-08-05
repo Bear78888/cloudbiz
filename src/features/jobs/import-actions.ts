@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { getCurrentMembership } from "@/features/organizations/service";
 import { trackServerEvent } from "@/lib/analytics";
 import { isLocale, type Locale } from "@/lib/routes";
+import type { Json } from "@/lib/supabase/database.types";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { MAX_IMPORT_ROWS } from "./csv";
 import type { CustomerInput, JobFieldsInput } from "./schema";
@@ -95,7 +96,9 @@ export async function importJobsAction(
   // One RPC, one transaction: a half-finished import is worse than none.
   const { data, error } = await supabase.rpc("import_jobs", {
     p_organization_id: membership.organizationId,
-    p_rows: rows,
+    // The RPC takes jsonb; the row shape is validated by parseJobForm and again
+      // by the CHECK constraints inside import_jobs (§14.15).
+      p_rows: rows as unknown as Json,
   });
 
   if (error || !data) return { ...empty, error: "generic" };

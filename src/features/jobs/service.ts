@@ -19,6 +19,7 @@ import {
   type PaymentStatus,
 } from "./model";
 import type { CustomerInput, JobFieldsInput } from "./schema";
+import { must } from "@/lib/supabase/query";
 
 /**
  * Job Tracker data access (§13). Every query goes through the session client,
@@ -140,12 +141,15 @@ async function findMatchingCustomerIds(
     clauses.push(`phone_digits.ilike.${quoteFilterValue(`%${digits}%`)}`);
   }
 
-  const { data } = await supabase
+  const data = await must(
+    supabase
     .from("customers")
     .select("id")
     .eq("organization_id", organizationId)
     .or(clauses.join(","))
-    .limit(200);
+    .limit(200),
+    "service:data",
+  );
   return (data ?? []).map((row) => row.id as string);
 }
 
@@ -215,13 +219,16 @@ export async function getJobActivities(
   jobId: string,
   limit = 50,
 ): Promise<JobActivityRow[]> {
-  const { data } = await supabase
+  const data = await must(
+    supabase
     .from("job_activities")
     .select("id, event_type, actor_type, actor_id, metadata, created_at")
     .eq("organization_id", organizationId)
     .eq("job_id", jobId)
     .order("created_at", { ascending: false })
-    .limit(limit);
+    .limit(limit),
+    "service:data",
+  );
   return (data ?? []) as JobActivityRow[];
 }
 
@@ -240,12 +247,15 @@ export async function loadJobCounters(
   supabase: SupabaseClient,
   organizationId: string,
 ): Promise<JobCounterRow[]> {
-  const { data } = await supabase
+  const data = await must(
+    supabase
     .from("jobs")
     .select("status, payment_status, scheduled_start")
     .eq("organization_id", organizationId)
     .is("deleted_at", null)
-    .limit(5000);
+    .limit(5000),
+    "service:data",
+  );
   return (data ?? []) as JobCounterRow[];
 }
 
@@ -294,7 +304,10 @@ async function resolveCustomerId(
   else if (existingCustomerId) matchQuery = matchQuery.eq("id", existingCustomerId);
   else matchQuery = matchQuery.eq("name", input.name);
 
-  const { data: matched } = await matchQuery.maybeSingle();
+  const matched = await must(
+    matchQuery.maybeSingle(),
+    "service:matched",
+  );
 
   const consentFields = input.sms_consent
     ? {
@@ -388,12 +401,15 @@ export async function setJobStatus(
 ): Promise<{ ok: true } | { error: "generic" | "invalid_choice" }> {
   if (!isJobStatus(nextStatus)) return { error: "invalid_choice" };
 
-  const { data: current } = await supabase
+  const current = await must(
+    supabase
     .from("jobs")
     .select("payment_status")
     .eq("organization_id", organizationId)
     .eq("id", jobId)
-    .maybeSingle();
+    .maybeSingle(),
+    "service:current",
+  );
   if (!current) return { error: "generic" };
 
   const { error } = await supabase
@@ -477,11 +493,14 @@ export async function listAssignableMembers(
   supabase: SupabaseClient,
   organizationId: string,
 ): Promise<{ id: string; label: string }[]> {
-  const { data } = await supabase
+  const data = await must(
+    supabase
     .from("organization_members")
     .select("user_id, profiles (display_name, email)")
     .eq("organization_id", organizationId)
-    .eq("status", "active");
+    .eq("status", "active"),
+    "service:data",
+  );
 
   return (data ?? []).map((row) => {
     const profile = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles;

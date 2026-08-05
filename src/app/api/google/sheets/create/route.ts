@@ -5,6 +5,7 @@ import { createSpreadsheet } from "@/features/google/sheets";
 import { getCurrentMembership } from "@/features/organizations/service";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { must } from "@/lib/supabase/query";
 
 export const runtime = "nodejs";
 
@@ -79,12 +80,15 @@ export async function POST(request: NextRequest) {
     return finish("sheet_create_failed");
   }
 
-  const { data: connection } = await admin
+  const connection = await must(
+    admin
     .from("google_connections")
     .select("id")
     .eq("organization_id", membership.organizationId)
     .eq("status", "active")
-    .maybeSingle();
+    .maybeSingle(),
+    "route:connection",
+  );
 
   const { error: insertError } = await admin.from("google_spreadsheets").insert({
     organization_id: membership.organizationId,

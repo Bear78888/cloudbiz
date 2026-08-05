@@ -17,6 +17,7 @@ import { getCurrentMembership } from "@/features/organizations/service";
 import { getDict } from "@/lib/i18n";
 import { isLocale, type Locale } from "@/lib/routes";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { must } from "@/lib/supabase/query";
 
 export const dynamic = "force-dynamic";
 
@@ -61,12 +62,15 @@ export default async function JobsPage({
 
   // Job Tracker is free (§13.1); the entitlement only matters when an admin has
   // suspended it (§11.5), which must read as a paused tool, not as an error.
-  const { data: entitlement } = await supabase
+  const entitlement = await must(
+    supabase
     .from("entitlements")
     .select("status")
     .eq("organization_id", membership.organizationId)
     .eq("feature_code", "job_tracker")
-    .maybeSingle();
+    .maybeSingle(),
+    "page:entitlement",
+  );
   if (entitlement && entitlement.status !== "active") {
     return (
       <section className="rounded-2xl border border-amber-200 bg-amber-50 p-6">
