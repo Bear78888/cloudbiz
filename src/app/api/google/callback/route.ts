@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { exchangeCodeForTokens, type GoogleOAuthFailure } from "@/features/google/oauth";
-import { storeGoogleConnection } from "@/features/google/service";
+import { backfillOrganization, storeGoogleConnection } from "@/features/google/service";
 import { verifyOAuthState } from "@/features/google/state";
 import { getCurrentMembership } from "@/features/organizations/service";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -78,6 +78,12 @@ export async function GET(request: NextRequest) {
 
   const stored = await storeGoogleConnection(membership.organizationId, exchanged.value);
   if (!stored.ok) return finish(stored.reason === "not_configured" ? "not_configured" : "failed");
+
+  // §14.5: reconnect performs a backfill. While the connection was broken the
+  // queue was parked, and we cannot know what the sheet missed — so everything
+  // is queued again rather than guessed at. Writes are keyed by UUID (§14.8),
+  // so re-sending a row that is already there costs a call, not a duplicate.
+  await backfillOrganization(membership.organizationId);
 
   return finish("connected");
 }

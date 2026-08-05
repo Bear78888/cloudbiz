@@ -674,6 +674,12 @@ export const es: Dict = {
       skipForNow: "Ahora no",
       openSheet: "Abrir hoja",
       syncNow: "Sincronizar ahora",
+      disconnect: "Desconectar",
+      disconnectHint:
+        "Detiene la sincronización. Tu hoja de cálculo se queda en tu cuenta de Google tal como está.",
+      replacementSheet: "Crear una hoja de reemplazo",
+      replacementHint:
+        "Crea una hoja nueva y la llena con todo lo que tienes. La anterior se queda en tu cuenta de Google.",
       sheetName: "Hoja de cálculo",
       lastSynced: "Última sincronización",
       neverSynced: "Aún no",
@@ -690,6 +696,7 @@ export const es: Dict = {
         sheet_unavailable:
           "Tu Hoja de cálculo de Google no está disponible. Tus datos de HandyAlliance están seguros.",
         sync_done: "Todo está actualizado en tu hoja de cálculo.",
+        disconnected: "Google está desconectado. Tu hoja de cálculo sigue en tu cuenta de Google.",
         sync_nothing_due: "No hay nada nuevo que sincronizar: tu hoja ya está al día.",
         sync_partial:
           "Algunos cambios todavía no se pudieron enviar a Google. Seguiremos intentando: no se pierde nada.",

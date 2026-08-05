@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { getAccessTokenForOrganization } from "@/features/google/service";
+import { backfillOrganization, getAccessTokenForOrganization } from "@/features/google/service";
 import { createSpreadsheet } from "@/features/google/sheets";
 import { getCurrentMembership } from "@/features/organizations/service";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
@@ -106,6 +106,12 @@ export async function POST(request: NextRequest) {
     console.error("[google] spreadsheet created but not recorded:", insertError.message);
     return finish("sheet_created_not_recorded");
   }
+
+  // A new sheet is empty, so everything that exists has to be queued (§14.5).
+  // Without this the owner sees headers and nothing else until the next time
+  // they happen to edit something.
+  const backfill = await backfillOrganization(membership.organizationId);
+  if ("error" in backfill) return finish("sheet_created_not_recorded");
 
   return finish("sheet_created");
 }

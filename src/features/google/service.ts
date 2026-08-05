@@ -259,3 +259,137 @@ export async function getAccessTokenForOrganization(
 
   return { ok: true, accessToken: refreshed.accessToken };
 }
+
+/**
+ * Queues every job and customer of an organization for sync (§14.5).
+ *
+ * Needed whenever the sheet and the database can no longer be assumed to
+ * agree: a freshly created spreadsheet is empty, a replacement sheet is empty,
+ * and after a reconnect we do not know what was missed while the connection
+ * was broken. §14.5 says reconnect performs a backfill, and the same reasoning
+ * covers the other two.
+ *
+ * Rows that already have an open event are skipped rather than duplicated —
+ * the partial unique index would reject them anyway, and one rejected batch
+ * would abort the rest.
+ */
+export async function backfillOrganization(
+  organizationId: string,
+): Promise<{ queued: number } | { error: string }> {
+  const admin = createSupabaseAdminClient();
+
+  const [jobs, customers, open] = await Promise.all([
+    admin.from("jobs").select("id").eq("organization_id", organizationId),
+    admin.from("customers").select("id").eq("organization_id", organizationId),
+    admin
+      .from("sync_outbox")
+      .select("entity_type, entity_id")
+      .eq("organization_id", organizationId)
+      .in("status", ["pending", "retrying"]),
+  ]);
+
+  for (const result of [jobs, customers, open]) {
+    if (result.error) {
+      console.error("[google] backfill could not read the data:", result.error.message);
+      return { error: result.error.message };
+    }
+  }
+
+  const alreadyQueued = new Set(
+    (open.data ?? []).map((event) => `${event.entity_type}:${event.entity_id}`),
+  );
+
+  const stamp = Date.now();
+  const rows = [
+    ...(jobs.data ?? []).map((row) => ({ entity_type: "job" as const, entity_id: row.id })),
+    ...(customers.data ?? []).map((row) => ({
+      entity_type: "customer" as const,
+      entity_id: row.id,
+    })),
+  ]
+    .filter((row) => !alreadyQueued.has(`${row.entity_type}:${row.entity_id}`))
+    .map((row, index) => ({
+      organization_id: organizationId,
+      entity_type: row.entity_type,
+      entity_id: row.entity_id,
+      operation: "upsert" as const,
+      idempotency_key: `backfill:${row.entity_type}:${row.entity_id}:${stamp}:${index}`,
+    }));
+
+  if (rows.length === 0) return { queued: 0 };
+
+  // Chunked: a backfill of a long-running organization is thousands of rows,
+  // and one oversized request is a timeout rather than a slow success.
+  const CHUNK = 500;
+  for (let start = 0; start < rows.length; start += CHUNK) {
+    const { error } = await admin.from("sync_outbox").insert(rows.slice(start, start + CHUNK));
+    if (error) {
+      console.error("[google] backfill could not queue events:", error.message);
+      return { error: error.message };
+    }
+  }
+
+  return { queued: rows.length };
+}
+
+/**
+ * Disconnects Google (§14.5).
+ *
+ * The spreadsheet is deliberately left alone: §14.5 is explicit that
+ * disconnecting does not delete it. It is the owner's file, in the owner's
+ * Drive, and it stays there with whatever was last written — deleting it would
+ * destroy a record they may still need and that we do not own.
+ */
+export async function disconnectGoogle(
+  organizationId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const admin = createSupabaseAdminClient();
+  const now = new Date().toISOString();
+
+  const { error: connectionError } = await admin
+    .from("google_connections")
+    .update({ status: "revoked", revoked_at: now })
+    .eq("organization_id", organizationId)
+    .in("status", ["active", "needs_reconnect"]);
+  if (connectionError) {
+    console.error("[google] could not revoke the connection:", connectionError.message);
+    return { ok: false, error: connectionError.message };
+  }
+
+  // The token is removed, not kept "just in case": once disconnected there is
+  // no path that may use it, and a stored credential nobody needs is only a
+  // liability (§26).
+  const { error: tokenError } = await admin
+    .from("google_oauth_tokens")
+    .delete()
+    .eq("organization_id", organizationId);
+  if (tokenError) {
+    console.error("[google] could not remove the stored token:", tokenError.message);
+    return { ok: false, error: tokenError.message };
+  }
+
+  const { error: sheetError } = await admin
+    .from("google_spreadsheets")
+    .update({ status: "disconnected" })
+    .eq("organization_id", organizationId)
+    .eq("status", "active");
+  if (sheetError) {
+    console.error("[google] could not mark the spreadsheet disconnected:", sheetError.message);
+    return { ok: false, error: sheetError.message };
+  }
+
+  // Pending work is parked, not deleted: if they reconnect, the backfill will
+  // cover the same ground, and leaving events `pending` would have the worker
+  // retrying against a connection that no longer exists.
+  const { error: outboxError } = await admin
+    .from("sync_outbox")
+    .update({ status: "disconnected", last_error: "disconnected" })
+    .eq("organization_id", organizationId)
+    .in("status", ["pending", "retrying", "processing"]);
+  if (outboxError) {
+    console.error("[google] could not park the queue:", outboxError.message);
+    return { ok: false, error: outboxError.message };
+  }
+
+  return { ok: true };
+}
