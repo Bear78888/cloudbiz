@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { changeEstimateStatusAction } from "@/features/estimates/actions";
+import { changeEstimateStatusAction, sendEstimateAction } from "@/features/estimates/actions";
 import { EstimateEditor } from "@/features/estimates/EstimateEditor";
 import { isEditable, isReleased } from "@/features/estimates/model";
 import { getEstimate } from "@/features/estimates/service";
@@ -105,7 +105,9 @@ export default async function EstimatePage({
   const dict = getDict(l);
   const e = dict.platform.estimates;
 
-  const blockedParam = (await searchParams).blocked;
+  const query = await searchParams;
+  const sentOk = query.sent === "1";
+  const blockedParam = query.blocked;
   const blocked = blockerMessage(dict, Array.isArray(blockedParam) ? blockedParam[0] : blockedParam);
 
   const supabase = await createSupabaseServerClient();
@@ -156,6 +158,15 @@ export default async function EstimatePage({
         </p>
       </div>
 
+      {sentOk ? (
+        <p
+          role="status"
+          className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-900"
+        >
+          {e.sentNotice}
+        </p>
+      ) : null}
+
       {blocked ? (
         <p
           role="alert"
@@ -184,13 +195,27 @@ export default async function EstimatePage({
           ) : null}
           {estimate.status === "ready" ? (
             <>
+              {/* §16.9: email is the main path now that we have a sender. The
+                  manual mark stays for a customer with no email on file, or a
+                  quote handed over on paper. */}
+              <form action={sendEstimateAction}>
+                <input type="hidden" name="locale" value={l} />
+                <input type="hidden" name="job_id" value={jobId} />
+                <input type="hidden" name="estimate_id" value={estimate.id} />
+                <button
+                  type="submit"
+                  className="min-h-12 rounded-xl bg-brand-600 px-5 font-semibold text-white hover:bg-brand-700"
+                >
+                  {e.sendByEmail}
+                </button>
+              </form>
               <StatusButton
                 locale={l}
                 jobId={jobId}
                 estimateId={estimate.id}
                 status="sent"
                 label={e.markSent}
-                tone="primary"
+                tone="secondary"
               />
               <StatusButton
                 locale={l}

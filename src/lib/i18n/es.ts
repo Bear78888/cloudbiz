@@ -986,6 +986,9 @@ export const es: Dict = {
         too_many_items: "Un presupuesto puede tener como máximo 60 líneas.",
       },
       blockers: {
+        no_customer_email: "Este cliente no tiene correo. Agrégalo en el trabajo, o copia el enlace de abajo y envíaselo tú.",
+        email_not_configured: "El correo aún no está configurado. Copia el enlace de abajo y envíaselo tú.",
+        send_failed: "El correo no salió. No se envió nada; inténtalo de nuevo.",
         not_approved: "Aprueba el presupuesto antes de enviarlo.",
         no_items: "Agrega al menos una línea antes de aprobar.",
         zero_total: "El total es cero: agrega un precio antes de aprobar.",
@@ -1038,6 +1041,8 @@ export const es: Dict = {
       linkSection: "Enlace para el cliente",
       linkHint: "Envíaselo a tu cliente. Solo quien tenga el enlace puede abrirlo.",
       linkExpires: "El enlace deja de funcionar el",
+      sendByEmail: "Enviar al cliente",
+      sentNotice: "Enviado. Tu cliente ya tiene el presupuesto.",
       statusSection: "Estado",
       approve: "Aprobar",
       approveHint: "Revisa el precio. Nada llega al cliente hasta que lo apruebes.",

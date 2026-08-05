@@ -1003,6 +1003,9 @@ export const en = {
         too_many_items: "An estimate can have at most 60 lines.",
       },
       blockers: {
+        no_customer_email: "This customer has no email address. Add one on the job, or copy the link below and send it yourself.",
+        email_not_configured: "Email isn't set up yet. Copy the link below and send it yourself.",
+        send_failed: "The email didn't go out. Nothing was sent — please try again.",
         not_approved: "Approve the estimate before sending it.",
         no_items: "Add at least one line before approving.",
         zero_total: "The total is zero — add a price before approving.",
@@ -1058,6 +1061,8 @@ export const en = {
       linkSection: "Customer link",
       linkHint: "Send this to your customer. Only someone with the link can open it.",
       linkExpires: "The link stops working on",
+      sendByEmail: "Send to customer",
+      sentNotice: "Sent. Your customer has the estimate.",
       statusSection: "Status",
       approve: "Approve",
       approveHint: "Check the price. Nothing goes to the customer until you approve it.",
