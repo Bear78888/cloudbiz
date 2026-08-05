@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 import {
+  banner,
   createJob,
   createOrganization,
   formWith,
@@ -38,7 +39,7 @@ test("an estimate cannot leave the office without being approved", async ({ page
   // if this ever succeeds, an empty estimate can be put in front of a customer.
   await submitAndSettle(page, page.getByRole("button", { name: /^Approve$/ }));
   await page.waitForURL(/blocked=/, { timeout: 30_000 });
-  await expect(page.getByRole("alert")).toContainText(/at least one line/i);
+  await expect(banner(page, "alert", /at least one line/i)).toBeVisible();
 
   // Fill in two lines and a tax rate.
   await page.goto(estimateUrl);
@@ -55,7 +56,7 @@ test("an estimate cannot leave the office without being approved", async ({ page
   await expect(visibleText(page, "$325.29")).toBeVisible();
 
   await submitAndSettle(page, formWith(page, "#title").getByRole("button", { name: /Save estimate/i }));
-  await expect(page.getByRole("status")).toContainText(/Saved/i);
+  await expect(banner(page, "status", /Saved/i)).toBeVisible();
 
   // Saved totals, not form totals: reload from the database and check.
   await page.goto(estimateUrl);

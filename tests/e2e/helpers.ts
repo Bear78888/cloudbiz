@@ -79,6 +79,20 @@ export function visibleText(page: Page, text: string) {
   return page.getByText(text).filter({ visible: true }).first();
 }
 
+/**
+ * A banner with the given text, by role.
+ *
+ * `getByRole("alert")` alone is ambiguous on every page: Next.js renders
+ * `#__next-route-announcer__` with `role="alert"` to announce navigations, so
+ * a bare alert locator matches two elements and fails on strict mode — with an
+ * error about the announcer, which reads like the assertion was wrong rather
+ * than the locator. Naming the text says which banner is meant, and still fails
+ * if the banner never appears.
+ */
+export function banner(page: Page, role: "alert" | "status", text: RegExp) {
+  return page.getByRole(role).filter({ hasText: text });
+}
+
 export interface JobInput {
   customer: string;
   phone?: string;
