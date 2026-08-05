@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { createEstimateAction } from "@/features/estimates/actions";
+import { listEstimatesForJob } from "@/features/estimates/service";
 import {
   changeJobStatusAction,
   setJobDeletedAction,
@@ -12,7 +14,7 @@ import { JOB_STATUSES, jobMargin } from "@/features/jobs/model";
 import { getJob, getJobActivities, listAssignableMembers } from "@/features/jobs/service";
 import { getCurrentMembership } from "@/features/organizations/service";
 import { formatDate, formatDateTime, formatMoney } from "@/lib/datetime";
-import { getDict } from "@/lib/i18n";
+import { fmt, getDict } from "@/lib/i18n";
 import { isLocale, type Locale } from "@/lib/routes";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -67,15 +69,17 @@ export default async function JobDetailPage({
     );
   }
 
-  const [activities, members] = await Promise.all([
+  const [activities, members, estimates] = await Promise.all([
     getJobActivities(supabase, membership.organizationId, job.id),
     listAssignableMembers(supabase, membership.organizationId),
+    listEstimatesForJob(supabase, membership.organizationId, job.id),
   ]);
 
   const tz = membership.timezone;
   const currency = membership.currency;
   const margin = jobMargin(job);
   const assignee = members.find((m) => m.id === job.assigned_user_id);
+  const e = dict.platform.estimates;
 
   return (
     <div className="space-y-6">
@@ -254,6 +258,59 @@ export default async function JobDetailPage({
           </section>
         </div>
       </div>
+
+      {/* Estimates (§16). Versions rather than edits: the document a customer
+          accepted has to keep existing (§25.3). */}
+      <section className="rounded-2xl border border-slate-200 bg-white p-5">
+        <h2 className="text-sm font-bold uppercase tracking-wide text-slate-500">
+          {e.sectionTitle}
+        </h2>
+
+        {estimates.length === 0 ? (
+          <p className="mt-3 text-slate-600">{e.sectionEmpty}</p>
+        ) : (
+          <ul className="mt-3 divide-y divide-slate-100">
+            {estimates.map((estimate) => (
+              <li
+                key={estimate.id}
+                className="flex flex-wrap items-baseline justify-between gap-3 py-2"
+              >
+                <span className="text-slate-800">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    {fmt(e.versionLabel, { version: estimate.version })} ·{" "}
+                    {e.statuses[estimate.status]}
+                  </span>{" "}
+                  {estimate.title}
+                </span>
+                <span className="flex items-baseline gap-4">
+                  <span className="font-semibold text-slate-900">
+                    {formatMoney(Number(estimate.total), l, currency)}
+                  </span>
+                  <Link
+                    href={`/${l}/app/jobs/${job.id}/estimates/${estimate.id}`}
+                    className="font-semibold text-brand-700 underline"
+                  >
+                    {e.openEstimate}
+                  </Link>
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {!job.deleted_at ? (
+          <form action={createEstimateAction} className="mt-4">
+            <input type="hidden" name="locale" value={l} />
+            <input type="hidden" name="job_id" value={job.id} />
+            <button
+              type="submit"
+              className="min-h-12 rounded-xl border-2 border-brand-200 bg-white px-5 font-semibold text-brand-800 hover:border-brand-400 hover:bg-brand-50"
+            >
+              {estimates.length === 0 ? e.create : e.createAnother}
+            </button>
+          </form>
+        ) : null}
+      </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5">
         <h2 className="text-sm font-bold uppercase tracking-wide text-slate-500">

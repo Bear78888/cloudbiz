@@ -20,6 +20,8 @@ export const ANALYTICS_EVENTS = [
   "job_status_changed",
   "job_deleted",
   "jobs_imported",
+  "estimate_created",
+  "estimate_status_changed",
   "google_connect_started",
   "google_connected",
   "google_sync_failed",
