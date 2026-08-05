@@ -678,6 +678,12 @@ export const en = {
       skipForNow: "Skip for now",
       openSheet: "Open sheet",
       syncNow: "Sync now",
+      disconnect: "Disconnect",
+      disconnectHint:
+        "Stops the sync. Your spreadsheet stays in your Google account exactly as it is.",
+      replacementSheet: "Create a replacement sheet",
+      replacementHint:
+        "Makes a fresh spreadsheet and fills it with everything you have. The old one stays in your Google account.",
       sheetName: "Spreadsheet",
       lastSynced: "Last synced",
       neverSynced: "Not yet",
@@ -697,6 +703,7 @@ export const en = {
         sheet_unavailable:
           "Your Google Sheet is unavailable. Your HandyAlliance data is safe.",
         sync_done: "Everything is up to date in your sheet.",
+        disconnected: "Google is disconnected. Your spreadsheet is still in your Google account.",
         sync_nothing_due: "Nothing new to sync — your sheet is already current.",
         // Partial is its own message on purpose: "done" would be a lie and
         // "failed" would be scarier than the truth. The rest retries itself.

@@ -156,6 +156,24 @@ export default async function GoogleSettingsPage({
         </form>
 
         <p className="mt-4 text-xs text-slate-500 dark:text-slate-400">{g.scopeNote}</p>
+
+        {/* §14.13. Disconnect is offered only when there is something to
+            disconnect, and it says plainly that the spreadsheet stays — that
+            is the question anyone hesitates over before pressing it. */}
+        {connection ? (
+          <div className="mt-6 border-t border-slate-200 pt-5 dark:border-slate-800">
+            <form action="/api/google/disconnect" method="post">
+              <input type="hidden" name="locale" value={l} />
+              <button
+                type="submit"
+                className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-900"
+              >
+                {g.disconnect}
+              </button>
+            </form>
+            <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">{g.disconnectHint}</p>
+          </div>
+        ) : null}
       </section>
 
       {/* The spreadsheet itself. Only meaningful once Google is connected and
@@ -204,7 +222,22 @@ export default async function GoogleSettingsPage({
                     {g.syncNow}
                   </button>
                 </form>
+
+                {/* §14.5: the replacement is created and filled; the old sheet
+                    stays in the owner's Drive. */}
+                <form action="/api/google/sheets/create" method="post">
+                  <input type="hidden" name="locale" value={l} />
+                  <button
+                    type="submit"
+                    className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-900"
+                  >
+                    {g.replacementSheet}
+                  </button>
+                </form>
               </div>
+              <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
+                {g.replacementHint}
+              </p>
             </>
           ) : (
             <>
