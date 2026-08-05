@@ -12,10 +12,16 @@ import { describe, expect, it } from "vitest";
  * hand and would otherwise only surface as a broken email in someone's inbox —
  * an unbalanced `{{ if }}`, a `content_path` that points at a file which does
  * not exist, a button color that quietly drifts from the rest of HandyAlliance
- * mail. Whether `.Data.preferred_locale` actually selects the branch it should
- * is documented behaviour (Supabase's own docs show the identical
- * `{{ if eq .Data.Domain ... }}` pattern for exactly this purpose) rather than
- * something proven by a test in this repository.
+ * mail.
+ *
+ * One of these was not hypothetical. The first version compared
+ * `.Data.preferred_locale` to `"es"` directly, and a real e2e run against the
+ * real local GoTrue stack failed outright — not "wrong language", the whole
+ * signInWithOtp() call errored — because Go's `eq` errors on a nil interface
+ * compared against a typed string rather than treating it as unequal, and
+ * GoTrue's mailer fails the entire send on a template execution error. The fix
+ * is `eq (print .Data.preferred_locale) "es"`; the regression test below
+ * guards specifically against losing it back to the form that broke.
  */
 
 const ROOT = join(__dirname, "..", "..");
@@ -36,7 +42,8 @@ describe.each(TEMPLATES)("$name.html", ({ name, spanishTell, englishTell }) => {
 
   it("branches on preferred_locale exactly once, fully closed", () => {
     expect(html).toBeTruthy();
-    const opens = html!.match(/\{\{\s*if eq \.Data\.preferred_locale "es"\s*\}\}/g) ?? [];
+    const opens =
+      html!.match(/\{\{\s*if eq \(print \.Data\.preferred_locale\) "es"\s*\}\}/g) ?? [];
     const elses = html!.match(/\{\{\s*else\s*\}\}/g) ?? [];
     const ends = html!.match(/\{\{\s*end\s*\}\}/g) ?? [];
     expect(opens).toHaveLength(1);
@@ -44,8 +51,16 @@ describe.each(TEMPLATES)("$name.html", ({ name, spanishTell, englishTell }) => {
     expect(ends).toHaveLength(1);
   });
 
+  // The specific defect: comparing the field directly (no `print`) is exactly
+  // what made a real signInWithOtp() call fail outright in CI. Not a style
+  // preference — losing this wrapper back out reintroduces that failure.
+  it("never compares .Data.preferred_locale without wrapping it in print first", () => {
+    expect(html).not.toMatch(/eq \.Data\.preferred_locale "es"/);
+    expect(html).toContain('eq (print .Data.preferred_locale) "es"');
+  });
+
   it("has both languages, in the right order (Spanish branch first)", () => {
-    const ifIndex = html!.indexOf('if eq .Data.preferred_locale "es"');
+    const ifIndex = html!.indexOf('if eq (print .Data.preferred_locale) "es"');
     const elseIndex = html!.indexOf("{{ else }}");
     const spanishIndex = html!.indexOf(spanishTell);
     const englishIndex = html!.indexOf(englishTell);
@@ -90,5 +105,14 @@ describe("config.toml wiring", () => {
     expect(CONFIG).toContain("Confirm your HandyAlliance account");
     expect(CONFIG).toContain("Tu enlace de acceso a HandyAlliance");
     expect(CONFIG).toContain("Your HandyAlliance sign-in link");
+  });
+
+  // Subjects go through the same Go template engine as the body (confirmed by
+  // reading GoTrue's templatemailer/template.go) and are just as capable of
+  // failing the same way. The raw, unwrapped form is checked with the escaped
+  // quote TOML actually stores.
+  it("wraps the subject comparison the same defensive way as the body", () => {
+    expect(CONFIG).not.toMatch(/eq \.Data\.preferred_locale \\"es\\"/);
+    expect(CONFIG.match(/eq \(print \.Data\.preferred_locale\) \\"es\\"/g) ?? []).toHaveLength(2);
   });
 });

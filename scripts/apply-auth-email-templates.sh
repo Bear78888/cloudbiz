@@ -43,9 +43,9 @@ if ! command -v jq >/dev/null; then
 fi
 
 BODY=$(jq -n \
-  --arg confirmation_subject '{{ if eq .Data.preferred_locale "es" }}Confirma tu cuenta de HandyAlliance{{ else }}Confirm your HandyAlliance account{{ end }}' \
+  --arg confirmation_subject '{{ if eq (print .Data.preferred_locale) "es" }}Confirma tu cuenta de HandyAlliance{{ else }}Confirm your HandyAlliance account{{ end }}' \
   --arg confirmation_content "$CONFIRMATION_HTML" \
-  --arg magic_link_subject '{{ if eq .Data.preferred_locale "es" }}Tu enlace de acceso a HandyAlliance{{ else }}Your HandyAlliance sign-in link{{ end }}' \
+  --arg magic_link_subject '{{ if eq (print .Data.preferred_locale) "es" }}Tu enlace de acceso a HandyAlliance{{ else }}Your HandyAlliance sign-in link{{ end }}' \
   --arg magic_link_content "$MAGIC_LINK_HTML" \
   '{
     mailer_subjects_confirmation: $confirmation_subject,
@@ -63,4 +63,8 @@ curl -sS -X PATCH "https://api.supabase.com/v1/projects/$PROJECT_REF/config/auth
   -w "HTTP %{http_code}\n"
 
 echo "Response saved to /tmp/auth-config-response.json"
-echo "Verify with a real sign-up (or 'Email me a sign-in link') in each language before trusting this blind — GoTrue's rendering of .Data.preferred_locale was not exercised in CI (see docs/HANDYALLIANCE_ARCHITECTURE.md §5i)."
+echo "CI confirms the request succeeds in both languages (a real e2e run against"
+echo "the local stack originally failed here — see docs/HANDYALLIANCE_ARCHITECTURE.md"
+echo "§5i). It does not confirm which language actually renders. Request one real"
+echo "sign-in link on the Spanish page and one on the English page before trusting"
+echo "this in production."

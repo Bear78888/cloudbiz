@@ -7,8 +7,13 @@
 
   `{{ .ConfirmationURL }}` already lands on the right locale on its own; see
   confirmation.html for why.
+
+  `(print .Data.preferred_locale)` rather than a direct comparison — see
+  confirmation.html for the failure this avoids. This is the template that
+  actually caught it: the e2e request from a signInWithOtp() call errored
+  outright until this fix went in.
 -->
-{{ if eq .Data.preferred_locale "es" }}
+{{ if eq (print .Data.preferred_locale) "es" }}
 <!doctype html>
 <html lang="es">
 <body style="margin:0;padding:24px;background:#f8fafc;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;color:#0f172a">

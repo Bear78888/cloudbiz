@@ -17,8 +17,22 @@
 
   GoTrue's mailer sends HTML only — there is no plain-text alternative part
   the way our own Resend-based estimate email has one.
+
+  `(print .Data.preferred_locale)` rather than comparing `.Data.preferred_locale`
+  to "es" directly: found by an e2e run where requesting a magic link failed
+  outright rather than sending the wrong language. GoTrue's mailer.go builds
+  the template context from the *persisted* `user.UserMetaData`, and a template
+  parse/execute error fails the whole call, not just the render — confirmed by
+  reading GoTrue's own templatemailer/template.go, since nothing here can run
+  the real renderer to observe it directly (no Docker in this sandbox; Mailpit
+  excluded from CI for cost — see test-plan). Go's `eq` errors on a nil interface
+  compared against a typed string rather than treating it as unequal — a value
+  with no concrete type is not one `eq` can classify. Wrapping in `print` forces
+  a string first, so a genuinely absent field compares as `""` against `"es"`
+  instead of blowing up the send. Same fix in magic_link.html and config.toml's
+  subjects, which use the identical construction.
 -->
-{{ if eq .Data.preferred_locale "es" }}
+{{ if eq (print .Data.preferred_locale) "es" }}
 <!doctype html>
 <html lang="es">
 <body style="margin:0;padding:24px;background:#f8fafc;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;color:#0f172a">

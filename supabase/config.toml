@@ -257,13 +257,16 @@ otp_expiry = 3600
 # the live project is configured with, and so Studio's preview shows the real
 # thing rather than Supabase's stock copy.
 [auth.email.template.confirmation]
-subject = "{{ if eq .Data.preferred_locale \"es\" }}Confirma tu cuenta de HandyAlliance{{ else }}Confirm your HandyAlliance account{{ end }}"
+subject = "{{ if eq (print .Data.preferred_locale) \"es\" }}Confirma tu cuenta de HandyAlliance{{ else }}Confirm your HandyAlliance account{{ end }}"
 content_path = "./supabase/templates/confirmation.html"
 
 # This one does fire locally and in CI: "Email me a sign-in link" on the
-# sign-in page calls signInWithOtp() regardless of enable_confirmations.
+# sign-in page calls signInWithOtp() regardless of enable_confirmations. The
+# `(print .Data.preferred_locale)` in both subjects below is not decoration —
+# comparing the raw field directly errored the whole send when it had no
+# concrete type, which an e2e run against this exact template caught.
 [auth.email.template.magic_link]
-subject = "{{ if eq .Data.preferred_locale \"es\" }}Tu enlace de acceso a HandyAlliance{{ else }}Your HandyAlliance sign-in link{{ end }}"
+subject = "{{ if eq (print .Data.preferred_locale) \"es\" }}Tu enlace de acceso a HandyAlliance{{ else }}Your HandyAlliance sign-in link{{ end }}"
 content_path = "./supabase/templates/magic_link.html"
 
 # Uncomment to customize email template
