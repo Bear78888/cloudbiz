@@ -664,8 +664,37 @@ export const en = {
       scopeNote:
         "HandyAlliance can only see the spreadsheet it creates for you. It cannot see the rest of your Google Drive.",
       ownerOnly: "Only the owner can connect Google.",
+      // §14.4 gives three choices. The wording matters: under the drive.file
+      // scope an existing sheet cannot be attached by pasting its address, so
+      // the second option must read as "a window opens and you point at the
+      // file", never as "paste a link here" (§8.1 — say what will happen).
+      createSheet: "Create my Google Sheet",
+      createSheetHint:
+        "We make a new spreadsheet in your Google account and keep it up to date.",
+      chooseSheet: "Choose an existing sheet",
+      chooseSheetHint:
+        "Opens a Google window where you pick the file. HandyAlliance only gets access to the one you choose.",
+      comingSoonShort: "Available soon.",
+      skipForNow: "Skip for now",
+      openSheet: "Open sheet",
+      sheetName: "Spreadsheet",
+      lastSynced: "Last synced",
+      neverSynced: "Not yet",
+      noSheetTitle: "No spreadsheet yet",
+      noSheetBody: "Create one and your jobs will start appearing in it.",
       messages: {
         connected: "Google is connected.",
+        sheet_created: "Your spreadsheet is ready.",
+        sheet_create_failed: "We could not create the spreadsheet. Please try again.",
+        // The sheet exists in Drive but we failed to record it. Saying so is
+        // better than a generic failure, because a retry makes a second file.
+        sheet_created_not_recorded:
+          "The spreadsheet was created in your Google account, but we could not save the link to it. Please try again — you may end up with an extra file you can delete.",
+        sheet_temporarily_unavailable:
+          "Google is not responding right now. Nothing was lost — try again in a minute.",
+        // §14.14, verbatim: the reassurance is the point.
+        sheet_unavailable:
+          "Your Google Sheet is unavailable. Your HandyAlliance data is safe.",
         access_denied: "You cancelled the Google sign-in. Nothing changed.",
         no_refresh_token:
           "Google did not give us lasting access. Try connecting again and approve the request.",

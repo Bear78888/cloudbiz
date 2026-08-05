@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 
 import { getGoogleConnection } from "@/features/google/service";
+import { spreadsheetUrl } from "@/features/google/sheets";
 import { getCurrentMembership } from "@/features/organizations/service";
 import { getDict } from "@/lib/i18n";
 import { isLocale, type Locale } from "@/lib/routes";
@@ -69,6 +70,13 @@ export default async function GoogleSettingsPage({
   const message =
     messageFor(dict, reason) ??
     (connection?.problem ? messageFor(dict, connection.problem) : null);
+
+  const { data: spreadsheet } = await supabase
+    .from("google_spreadsheets")
+    .select("spreadsheet_id, spreadsheet_name, last_successful_sync_at, status")
+    .eq("organization_id", membership.organizationId)
+    .eq("status", "active")
+    .maybeSingle();
 
   const { count: pendingChanges } = await supabase
     .from("sync_outbox")
@@ -145,6 +153,89 @@ export default async function GoogleSettingsPage({
 
         <p className="mt-4 text-xs text-slate-500 dark:text-slate-400">{g.scopeNote}</p>
       </section>
+
+      {/* The spreadsheet itself. Only meaningful once Google is connected and
+          working — offering to create a sheet on a broken connection would just
+          fail in a second step. */}
+      {connection && !needsReconnect ? (
+        <section className="mt-6 rounded-xl border border-slate-200 p-5 dark:border-slate-800">
+          {spreadsheet ? (
+            <>
+              <dl className="grid gap-3 text-sm sm:grid-cols-2">
+                <div>
+                  <dt className="text-slate-500 dark:text-slate-400">{g.sheetName}</dt>
+                  <dd className="font-medium">{spreadsheet.spreadsheet_name as string}</dd>
+                </div>
+                <div>
+                  <dt className="text-slate-500 dark:text-slate-400">{g.lastSynced}</dt>
+                  <dd className="font-medium">
+                    {spreadsheet.last_successful_sync_at
+                      ? new Date(spreadsheet.last_successful_sync_at as string).toLocaleString(l, {
+                          dateStyle: "medium",
+                          timeStyle: "short",
+                          timeZone: membership.timezone,
+                        })
+                      : g.neverSynced}
+                  </dd>
+                </div>
+              </dl>
+              <a
+                href={spreadsheetUrl(spreadsheet.spreadsheet_id as string)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-4 inline-block rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-900"
+              >
+                {g.openSheet}
+              </a>
+            </>
+          ) : (
+            <>
+              <h2 className="text-base font-medium">{g.noSheetTitle}</h2>
+              <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">{g.noSheetBody}</p>
+
+              <div className="mt-5 grid gap-4 sm:grid-cols-2">
+                <form action="/api/google/sheets/create" method="post">
+                  <input type="hidden" name="locale" value={l} />
+                  <button
+                    type="submit"
+                    className="w-full rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200"
+                  >
+                    {g.createSheet}
+                  </button>
+                  <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                    {g.createSheetHint}
+                  </p>
+                </form>
+
+                {/*
+                  Deliberately a button, never a URL field. Under the drive.file
+                  scope HandyAlliance has no access to a file the user has not
+                  handed over through Google's own picker, so a pasted address
+                  could not work — and an input box would promise that it does.
+                  Disabled until the picker ships, with the same wording, so the
+                  affordance never changes shape under the user.
+                */}
+                <div>
+                  <button
+                    type="button"
+                    disabled
+                    aria-describedby="choose-sheet-hint"
+                    className="w-full cursor-not-allowed rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-400 dark:border-slate-700 dark:text-slate-500"
+                  >
+                    {g.chooseSheet}
+                  </button>
+                  <p
+                    id="choose-sheet-hint"
+                    className="mt-2 text-xs text-slate-500 dark:text-slate-400"
+                  >
+                    {g.chooseSheetHint} {g.comingSoonShort}
+                  </p>
+                </div>
+              </div>
+            </>
+          )}
+        </section>
+      ) : null}
     </main>
   );
 }

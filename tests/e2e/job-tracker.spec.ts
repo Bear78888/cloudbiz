@@ -5,6 +5,7 @@ import {
   createOrganization,
   formWith,
   signUp,
+  submitAndSettle,
   uniqueEmail,
   visibleText,
 } from "./helpers";
@@ -49,9 +50,7 @@ test("sign up, create the company, add a job, change its status", async ({ page 
 
   // Status change from the card (§13.8).
   await page.locator("#status-change").selectOption("scheduled");
-  await page.locator('form:has(#status-change)').getByRole("button").click();
-  await page.waitForURL(/\/en\/app\/jobs\/[0-9a-f-]{36}$/);
-  await page.reload();
+  await submitAndSettle(page, page.locator('form:has(#status-change)').getByRole("button"));
   await expect(page.getByText(/Status changed from .+ to .+/)).toBeVisible();
 
   // The list reflects it, and the view it belongs to lists it.
@@ -87,8 +86,7 @@ test("search, bulk status change, soft delete and restore", async ({ page }) => 
   const count = await checkboxes.count();
   for (let i = 0; i < count; i += 1) await checkboxes.nth(i).check();
   await page.locator("#bulk-status").selectOption("completed");
-  await page.getByRole("button", { name: "Apply to selected" }).click();
-  await page.waitForURL(/\/en\/app\/jobs/);
+  await submitAndSettle(page, page.getByRole("button", { name: "Apply to selected" }));
 
   await page.goto("/en/app/jobs?view=completed");
   await expect(visibleText(page, "AC tune-up")).toBeVisible();
@@ -99,8 +97,7 @@ test("search, bulk status change, soft delete and restore", async ({ page }) => 
   await page.getByRole("link", { name: "Open" }).first().click();
   await page.waitForURL(/\/en\/app\/jobs\/[0-9a-f-]{36}$/);
   const deletedJobUrl = page.url();
-  await page.locator('form:has(input[name="deleted"])').getByRole("button").click();
-  await page.waitForURL(/\/en\/app\/jobs(\?|$)/);
+  await submitAndSettle(page, page.locator('form:has(input[name="deleted"])').getByRole("button"));
 
   // The deleted job is listed under the Deleted filter and nowhere else.
   await page.goto("/en/app/jobs?deleted=1");
@@ -112,9 +109,7 @@ test("search, bulk status change, soft delete and restore", async ({ page }) => 
 
   await page.goto(deletedJobUrl);
   await expect(page.getByText("This job is deleted.")).toBeVisible();
-  await page.locator('form:has(input[name="deleted"])').getByRole("button").click();
-  await page.waitForURL(/\/en\/app\/jobs\/[0-9a-f-]{36}$/);
-  await page.reload();
+  await submitAndSettle(page, page.locator('form:has(input[name="deleted"])').getByRole("button"));
   await expect(page.getByText("This job is deleted.")).toHaveCount(0);
   await expect(page.getByText("Job restored")).toBeVisible();
 });

@@ -1,4 +1,4 @@
-import { expect, type Page } from "@playwright/test";
+import { expect, type Locator, type Page } from "@playwright/test";
 
 /**
  * Shared helpers for the end-to-end suite.
@@ -22,6 +22,28 @@ export const TEST_PASSWORD = "e2e-Test-Password-2026";
  */
 export function formWith(page: Page, fieldId: string) {
   return page.locator(`form:has(${fieldId})`);
+}
+
+/**
+ * Clicks a submit button and waits for the server action to actually finish.
+ *
+ * `waitForURL` is the wrong tool when an action redirects back to the page it
+ * started on — status change, soft delete, restore, bulk update. The URL
+ * already matches, so the wait resolves *before* the POST has even left the
+ * browser, and the `reload()` or `goto()` that follows aborts the request
+ * mid-flight. Next.js logs "The destination stream closed early", the write
+ * never lands, and the test fails on a later assertion that looks unrelated to
+ * the real cause. Waiting for the response instead means the action has been
+ * processed before anything else touches the page.
+ */
+export async function submitAndSettle(page: Page, submit: Locator): Promise<void> {
+  await Promise.all([
+    page.waitForResponse(
+      (response) => response.request().method() === "POST" && response.status() < 500,
+      { timeout: 30_000 },
+    ),
+    submit.click(),
+  ]);
 }
 
 /** Signs up through the real UI and lands on onboarding (§10.1, §10.3). */
