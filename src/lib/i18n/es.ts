@@ -664,8 +664,30 @@ export const es: Dict = {
       scopeNote:
         "HandyAlliance solo puede ver la hoja de cálculo que crea para ti. No puede ver el resto de tu Google Drive.",
       ownerOnly: "Solo el propietario puede conectar Google.",
+      createSheet: "Crear mi Hoja de cálculo de Google",
+      createSheetHint:
+        "Creamos una hoja de cálculo nueva en tu cuenta de Google y la mantenemos actualizada.",
+      chooseSheet: "Elegir una hoja existente",
+      chooseSheetHint:
+        "Se abre una ventana de Google donde eliges el archivo. HandyAlliance solo tendrá acceso al que elijas.",
+      comingSoonShort: "Disponible pronto.",
+      skipForNow: "Ahora no",
+      openSheet: "Abrir hoja",
+      sheetName: "Hoja de cálculo",
+      lastSynced: "Última sincronización",
+      neverSynced: "Aún no",
+      noSheetTitle: "Todavía no hay hoja de cálculo",
+      noSheetBody: "Crea una y tus trabajos empezarán a aparecer en ella.",
       messages: {
         connected: "Google está conectado.",
+        sheet_created: "Tu hoja de cálculo está lista.",
+        sheet_create_failed: "No pudimos crear la hoja de cálculo. Inténtalo de nuevo.",
+        sheet_created_not_recorded:
+          "La hoja de cálculo se creó en tu cuenta de Google, pero no pudimos guardar el enlace. Inténtalo de nuevo: puede quedarte un archivo extra que podrás borrar.",
+        sheet_temporarily_unavailable:
+          "Google no responde en este momento. No se perdió nada: inténtalo de nuevo en un minuto.",
+        sheet_unavailable:
+          "Tu Hoja de cálculo de Google no está disponible. Tus datos de HandyAlliance están seguros.",
         access_denied: "Cancelaste el inicio de sesión de Google. No cambió nada.",
         no_refresh_token:
           "Google no nos dio acceso permanente. Vuelve a conectar y aprueba la solicitud.",
