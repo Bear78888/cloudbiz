@@ -44,6 +44,13 @@ import { describe, expect, it } from "vitest";
  * See supabase/templates/confirmation.html for the full account of all
  * three bugs and docs/HANDYALLIANCE_ARCHITECTURE.md §5i for how each was
  * diagnosed.
+ *
+ * None of these three were ever what kept CI red, and this file cannot
+ * guard against the one that was: mailpit excluded from the local stack,
+ * which fails every real send with a DNS error regardless of what any
+ * template says. That's a CI/infrastructure defect, not a template one —
+ * see the CI workflow's "Start the local Supabase stack" step and
+ * §5i's fourth bug for the actual fix.
  */
 
 const ROOT = join(__dirname, "..", "..");

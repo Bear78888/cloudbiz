@@ -192,7 +192,19 @@ jobs:
 
       - name: Start the local Supabase stack
         # Only what the app touches: Postgres, the API and the auth server.
-        run: npx supabase start -x studio,imgproxy,realtime,storage-api,edge-runtime,logflare,vector,supavisor,mailpit
+        # mailpit is the one exception, and it earned its place back: GoTrue's
+        # SMTP host in this stack is wired to it (config.toml's [local_smtp],
+        # exposed to the auth container as the legacy hostname
+        # supabase_inbucket_<project>) whenever [local_smtp] is enabled,
+        # regardless of whether any test reads the resulting mail. Excluding
+        # it doesn't make sending faster — it makes every send fail outright,
+        # with a DNS lookup error ("server misbehaving") on a hostname that
+        # simply doesn't exist without this container. That's not a
+        # hypothetical: it's the actual, sole cause of four straight
+        # supposedly-template CI failures on auth-magic-link.spec.ts, found
+        # only after chasing three real-but-irrelevant template bugs first —
+        # see docs/HANDYALLIANCE_ARCHITECTURE.md §5i for the full account.
+        run: npx supabase start -x studio,imgproxy,realtime,storage-api,edge-runtime,logflare,vector,supavisor
 
       - name: Point the app at the local stack
         run: |

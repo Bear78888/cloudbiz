@@ -7,13 +7,25 @@ import { banner, uniqueEmail } from "./helpers";
  * actually fires against the real local stack in this suite (`enable_confirmations`
  * is off locally, so signUp() never sends one; see supabase/config.toml).
  *
- * This cannot see the email itself — Mailpit is excluded from the CI stack to
- * keep it fast (`supabase start -x ... mailpit`), and reversing that for one
- * template would cost every ordinary PR the runtime it was removed to save.
- * What this checks is the thing the code change in this PR could plausibly
- * have broken: passing `data: { preferred_locale }` to signInWithOtp() is a
- * new argument to a real API call, and a malformed one fails at the request,
- * which is the one failure mode visible from here.
+ * This cannot see the email itself — reading the rendered content would mean
+ * driving Mailpit's own UI, which this test has no need for. What it checks
+ * is the thing the code change in this PR could plausibly have broken:
+ * passing `data: { preferred_locale }` to signInWithOtp() is a new argument
+ * to a real API call, and a malformed one fails at the request, which is the
+ * one failure mode visible from here.
+ *
+ * Mailpit itself, however, is not optional infrastructure this test can do
+ * without: GoTrue's SMTP host in this stack is wired to it whenever
+ * `[local_smtp]` is enabled in config.toml (true here), regardless of
+ * whether anything ever reads the resulting mail. This test was originally
+ * written assuming CI's exclusion of Mailpit (`supabase start -x ...
+ * mailpit`, kept for runtime — see the CI workflow) only cost it the ability
+ * to inspect content, and that assumption was wrong: without Mailpit
+ * running, every real send fails outright with a DNS lookup error, and this
+ * test failed on that for real, four CI runs in a row, each time diagnosed
+ * (incorrectly) as a template bug before the actual cause surfaced — see
+ * docs/HANDYALLIANCE_ARCHITECTURE.md §5i. Mailpit is back in the CI stack
+ * because of this test specifically.
  */
 
 test("requesting a sign-in link succeeds with the locale attached", async ({ page }) => {
