@@ -8,12 +8,22 @@
   `{{ .ConfirmationURL }}` already lands on the right locale on its own; see
   confirmation.html for why.
 
-  `(print .Data.preferred_locale)` rather than a direct comparison — see
-  confirmation.html for the failure this avoids. This is the template that
-  actually caught it: the e2e request from a signInWithOtp() call errored
-  outright until this fix went in.
+  `.Data` is never touched directly in the branch condition — see
+  confirmation.html for the two bugs found in this exact spot and how each
+  was diagnosed. This is the template that actually caught both: it's the
+  one auth email that fires against the real local GoTrue stack in CI
+  (`enable_confirmations` is off locally, so signUp() never sends one), so
+  every e2e run of `tests/e2e/auth-magic-link.spec.ts` exercised this file's
+  real behavior, not just its syntax. Short version of the second bug, the
+  one that survived the first fix: a brand-new user created through
+  signInWithOtp()'s `create_user: true` path has `user.UserMetaData` come
+  back as a bare untyped nil rather than a nil map, and `.Data.preferred_locale`
+  panics evaluating a field on that — before `print`/`eq` ever run. The
+  `{{ with .Data }}` guard below skips cleanly instead of erroring on nil of
+  any kind, confirmed by executing this exact template through Go's real
+  `html/template` package with both shapes.
 -->
-{{ if eq (print .Data.preferred_locale) "es" }}
+{{ $locale := "" }}{{ with .Data }}{{ $locale = print .preferred_locale }}{{ end }}{{ if eq $locale "es" }}
 <!doctype html>
 <html lang="es">
 <body style="margin:0;padding:24px;background:#f8fafc;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;color:#0f172a">

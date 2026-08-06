@@ -18,21 +18,44 @@
   GoTrue's mailer sends HTML only — there is no plain-text alternative part
   the way our own Resend-based estimate email has one.
 
-  `(print .Data.preferred_locale)` rather than comparing `.Data.preferred_locale`
-  to "es" directly: found by an e2e run where requesting a magic link failed
-  outright rather than sending the wrong language. GoTrue's mailer.go builds
-  the template context from the *persisted* `user.UserMetaData`, and a template
-  parse/execute error fails the whole call, not just the render — confirmed by
-  reading GoTrue's own templatemailer/template.go, since nothing here can run
-  the real renderer to observe it directly (no Docker in this sandbox; Mailpit
-  excluded from CI for cost — see test-plan). Go's `eq` errors on a nil interface
-  compared against a typed string rather than treating it as unequal — a value
-  with no concrete type is not one `eq` can classify. Wrapping in `print` forces
-  a string first, so a genuinely absent field compares as `""` against `"es"`
-  instead of blowing up the send. Same fix in magic_link.html and config.toml's
-  subjects, which use the identical construction.
+  Why `.Data` is never touched directly in the branch condition — two real
+  bugs found in this exact spot, in order:
+
+  1. Comparing `.Data.preferred_locale` to "es" directly made a real e2e
+     magic-link request fail outright (HTTP 500, not "wrong language").
+     Hypothesis at the time: Go's `eq` errors on a nil interface compared
+     against a typed string. Fix tried: wrap in `print(...)` first.
+  2. That fix did not work — the next e2e run failed identically. Reading
+     the failing request's own trace (Playwright's `retain-on-failure`
+     capture of the real `/auth/v1/otp` response) gave the actual server
+     answer instead of another guess:
+     `{"code":"unexpected_failure","message":"Error sending magic link email"}`.
+     Reproducing GoTrue's exact renderer settled it for good: this sandbox
+     has no Docker, but it does have a Go toolchain, and a Go `html/template`
+     bug is best diagnosed by executing the real template through the real
+     `html/template` package rather than reasoning about it from outside.
+     GoTrue's own source (github.com/supabase/auth v2.194.0,
+     internal/mailer/templatemailer/templatemailer.go) builds the render
+     context as `"Data": user.UserMetaData`, and for a brand-new user
+     created via signInWithOtp()'s `create_user: true` path that field comes
+     back as a bare, untyped nil — not a nil *map*. Feeding exactly that
+     shape through `html/template` reproduces the crash:
+     `nil pointer evaluating interface {}.preferred_locale`. The panic is in
+     evaluating `.Data.preferred_locale` itself, before `print` or `eq` ever
+     run, so wrapping the comparison could never have helped. A typed-nil
+     map, an empty map, and a populated map all render fine through the same
+     engine; only the untyped-nil shape panics.
+
+  The actual fix: never write `.Data.preferred_locale` where `.Data` might be
+  that untyped nil. `{{ with .Data }}` is null-safe by construction — it
+  skips its block instead of erroring when the piped value is nil/empty of
+  any kind — so the locale is pulled into a plain variable inside that guard,
+  and every branch below reads the variable, never `.Data` directly. Same
+  construction in magic_link.html and in config.toml's subjects, which parse
+  and execute as a fully separate template from the body and need the same
+  guard independently.
 -->
-{{ if eq (print .Data.preferred_locale) "es" }}
+{{ $locale := "" }}{{ with .Data }}{{ $locale = print .preferred_locale }}{{ end }}{{ if eq $locale "es" }}
 <!doctype html>
 <html lang="es">
 <body style="margin:0;padding:24px;background:#f8fafc;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;color:#0f172a">

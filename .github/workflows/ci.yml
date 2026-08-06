@@ -311,8 +311,19 @@ jobs:
           # GoTrue's own log, not just the browser's notice. A failed auth
           # request (e.g. the mailer choking on a template) shows only a
           # generic message client-side; the reason lives in this container.
+          #
+          # Filtered, not just tailed: this suite's session-refresh polling
+          # floods the log with GET /user noise fast enough that a plain
+          # `--tail 200` once caught only that and missed the one failing
+          # request entirely, on the run this diagnostic was written to
+          # explain (see docs/HANDYALLIANCE_ARCHITECTURE.md §5i — the actual
+          # answer that run was after came from Playwright's own trace
+          # instead). Excluding that one noisy path leaves everything else,
+          # which is small enough that a generous tail is a safety net, not
+          # the only filter doing the work.
           docker ps -a --filter "name=auth" || true
-          docker logs "$(docker ps -a --filter 'name=auth' --format '{{.Names}}' | head -1)" --tail 200 || true
+          AUTH_CONTAINER="$(docker ps -a --filter 'name=auth' --format '{{.Names}}' | head -1)"
+          docker logs "$AUTH_CONTAINER" 2>&1 | grep -v '"path":"/user"' | tail -400 || true
 
       - name: Stop the stack
         if: always()

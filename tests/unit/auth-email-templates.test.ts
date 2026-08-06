@@ -5,23 +5,33 @@ import { describe, expect, it } from "vitest";
 /**
  * Supabase's own auth emails (confirmation, magic link) — §10.1.
  *
- * These are Go templates rendered by GoTrue, not by our code, so there is no
- * engine here to actually render them: Node cannot execute Go's `text/template`
- * syntax, and this sandbox has no Docker to run the real local stack against.
- * What is checked instead is the class of mistake that is both easy to make by
- * hand and would otherwise only surface as a broken email in someone's inbox —
- * an unbalanced `{{ if }}`, a `content_path` that points at a file which does
- * not exist, a button color that quietly drifts from the rest of HandyAlliance
- * mail.
+ * These are Go templates rendered by GoTrue, not by our code, so Node has no
+ * engine to render them the way GoTrue does — but this repo does have a Go
+ * toolchain even without Docker, and that turned out to be enough: the real
+ * bug below was found and verified by executing the actual template content
+ * through Go's real `html/template` package with the actual data shapes
+ * GoTrue's own source produces, not by reasoning about the syntax from
+ * outside. What's checked here is structural — an unbalanced `{{ if }}`, a
+ * `content_path` that points at a file which does not exist, a button color
+ * that quietly drifts from the rest of HandyAlliance mail — plus regression
+ * guards against the two specific defects a real e2e run against the real
+ * local GoTrue stack actually caught, in order:
  *
- * One of these was not hypothetical. The first version compared
- * `.Data.preferred_locale` to `"es"` directly, and a real e2e run against the
- * real local GoTrue stack failed outright — not "wrong language", the whole
- * signInWithOtp() call errored — because Go's `eq` errors on a nil interface
- * compared against a typed string rather than treating it as unequal, and
- * GoTrue's mailer fails the entire send on a template execution error. The fix
- * is `eq (print .Data.preferred_locale) "es"`; the regression test below
- * guards specifically against losing it back to the form that broke.
+ * 1. Comparing `.Data.preferred_locale` to "es" directly made signInWithOtp()
+ *    fail outright (HTTP 500 "Error sending magic link email", not "wrong
+ *    language").
+ * 2. Wrapping that comparison in `print(...)` did not fix it — the next e2e
+ *    run failed identically. The real cause: for a brand-new user created via
+ *    signInWithOtp()'s `create_user: true`, GoTrue hands the template a bare
+ *    untyped-nil `.Data`, and `.Data.preferred_locale` panics evaluating the
+ *    field itself, before `print`/`eq` ever run. `{{ with .Data }}` is the
+ *    guard that's actually null-safe — it skips its block instead of
+ *    erroring on nil of any kind — so the locale is read into a plain
+ *    variable inside that guard, and every branch reads the variable, never
+ *    `.Data` directly.
+ *
+ * See supabase/templates/confirmation.html for the full account of both
+ * bugs and docs/HANDYALLIANCE_ARCHITECTURE.md §5i for how each was diagnosed.
  */
 
 const ROOT = join(__dirname, "..", "..");
@@ -40,27 +50,39 @@ describe.each(TEMPLATES)("$name.html", ({ name, spanishTell, englishTell }) => {
     expect(html, `supabase/templates/${name}.html is missing`).not.toBeNull();
   });
 
-  it("branches on preferred_locale exactly once, fully closed", () => {
+  it("guards .Data with `with` before ever reading a field off it", () => {
     expect(html).toBeTruthy();
-    const opens =
-      html!.match(/\{\{\s*if eq \(print \.Data\.preferred_locale\) "es"\s*\}\}/g) ?? [];
-    const elses = html!.match(/\{\{\s*else\s*\}\}/g) ?? [];
-    const ends = html!.match(/\{\{\s*end\s*\}\}/g) ?? [];
-    expect(opens).toHaveLength(1);
-    expect(elses).toHaveLength(1);
-    expect(ends).toHaveLength(1);
+    expect(html).toContain('{{ $locale := "" }}');
+    expect(html).toContain("{{ with .Data }}{{ $locale = print .preferred_locale }}{{ end }}");
   });
 
-  // The specific defect: comparing the field directly (no `print`) is exactly
-  // what made a real signInWithOtp() call fail outright in CI. Not a style
-  // preference — losing this wrapper back out reintroduces that failure.
-  it("never compares .Data.preferred_locale without wrapping it in print first", () => {
+  it("branches on the guarded $locale variable exactly once, fully closed", () => {
+    expect(html).toBeTruthy();
+    const withs = html!.match(/\{\{\s*with \.Data\s*\}\}/g) ?? [];
+    const ifs = html!.match(/\{\{\s*if eq \$locale "es"\s*\}\}/g) ?? [];
+    const elses = html!.match(/\{\{\s*else\s*\}\}/g) ?? [];
+    const ends = html!.match(/\{\{\s*end\s*\}\}/g) ?? [];
+    // One functional `{{ with .Data }}`, plus one more quoted in the
+    // explanatory comment at the top of the file — same double-count shape
+    // as `.ConfirmationURL` below.
+    expect(withs).toHaveLength(2);
+    expect(ifs).toHaveLength(1);
+    expect(elses).toHaveLength(1);
+    // One `end` closes the `with` guard, the other closes the `if`/`else`.
+    expect(ends).toHaveLength(2);
+  });
+
+  // The two specific defects a real e2e run against the real local GoTrue
+  // stack found, in order — see the file header above. Losing either guard
+  // back out reintroduces a signInWithOtp()/signUp() failure that no amount
+  // of "it looks right" review will catch without Docker.
+  it("never reads .Data.preferred_locale directly, print-wrapped or not", () => {
     expect(html).not.toMatch(/eq \.Data\.preferred_locale "es"/);
-    expect(html).toContain('eq (print .Data.preferred_locale) "es"');
+    expect(html).not.toMatch(/eq \(print \.Data\.preferred_locale\) "es"/);
   });
 
   it("has both languages, in the right order (Spanish branch first)", () => {
-    const ifIndex = html!.indexOf('if eq (print .Data.preferred_locale) "es"');
+    const ifIndex = html!.indexOf('if eq $locale "es"');
     const elseIndex = html!.indexOf("{{ else }}");
     const spanishIndex = html!.indexOf(spanishTell);
     const englishIndex = html!.indexOf(englishTell);
@@ -107,12 +129,17 @@ describe("config.toml wiring", () => {
     expect(CONFIG).toContain("Your HandyAlliance sign-in link");
   });
 
-  // Subjects go through the same Go template engine as the body (confirmed by
-  // reading GoTrue's templatemailer/template.go) and are just as capable of
-  // failing the same way. The raw, unwrapped form is checked with the escaped
-  // quote TOML actually stores.
-  it("wraps the subject comparison the same defensive way as the body", () => {
+  // Subjects parse and execute as their own template, fully separate from
+  // the body (confirmed by reading GoTrue's templatemailer/template.go), so
+  // they need the same `with .Data` guard independently — the body's fix
+  // does not cover them. Checked against the escaped-quote form TOML
+  // actually stores on disk.
+  it("wraps the subject's locale read in the same with-guard as the body", () => {
     expect(CONFIG).not.toMatch(/eq \.Data\.preferred_locale \\"es\\"/);
-    expect(CONFIG.match(/eq \(print \.Data\.preferred_locale\) \\"es\\"/g) ?? []).toHaveLength(2);
+    expect(CONFIG).not.toMatch(/eq \(print \.Data\.preferred_locale\) \\"es\\"/);
+    expect(
+      CONFIG.match(/\{\{ with \.Data \}\}\{\{ \$locale = print \.preferred_locale \}\}\{\{ end \}\}/g) ?? [],
+    ).toHaveLength(2);
+    expect(CONFIG.match(/eq \$locale \\"es\\"/g) ?? []).toHaveLength(2);
   });
 });

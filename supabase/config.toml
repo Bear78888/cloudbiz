@@ -257,16 +257,19 @@ otp_expiry = 3600
 # the live project is configured with, and so Studio's preview shows the real
 # thing rather than Supabase's stock copy.
 [auth.email.template.confirmation]
-subject = "{{ if eq (print .Data.preferred_locale) \"es\" }}Confirma tu cuenta de HandyAlliance{{ else }}Confirm your HandyAlliance account{{ end }}"
+subject = "{{ $locale := \"\" }}{{ with .Data }}{{ $locale = print .preferred_locale }}{{ end }}{{ if eq $locale \"es\" }}Confirma tu cuenta de HandyAlliance{{ else }}Confirm your HandyAlliance account{{ end }}"
 content_path = "./supabase/templates/confirmation.html"
 
 # This one does fire locally and in CI: "Email me a sign-in link" on the
 # sign-in page calls signInWithOtp() regardless of enable_confirmations. The
-# `(print .Data.preferred_locale)` in both subjects below is not decoration —
-# comparing the raw field directly errored the whole send when it had no
-# concrete type, which an e2e run against this exact template caught.
+# `{{ with .Data }}` guard in both subjects below is not decoration — see
+# confirmation.html for the two real bugs found in this exact spot (a naive
+# `eq .Data.preferred_locale`, then a `print(...)`-wrapped one that still
+# panicked on an untyped-nil `.Data`) and how each was diagnosed. Subjects
+# parse and execute as their own template, separate from the body, so they
+# need this guard independently rather than inheriting the body's fix.
 [auth.email.template.magic_link]
-subject = "{{ if eq (print .Data.preferred_locale) \"es\" }}Tu enlace de acceso a HandyAlliance{{ else }}Your HandyAlliance sign-in link{{ end }}"
+subject = "{{ $locale := \"\" }}{{ with .Data }}{{ $locale = print .preferred_locale }}{{ end }}{{ if eq $locale \"es\" }}Tu enlace de acceso a HandyAlliance{{ else }}Your HandyAlliance sign-in link{{ end }}"
 content_path = "./supabase/templates/magic_link.html"
 
 # Uncomment to customize email template
