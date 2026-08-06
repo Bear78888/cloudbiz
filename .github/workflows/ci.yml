@@ -192,7 +192,19 @@ jobs:
 
       - name: Start the local Supabase stack
         # Only what the app touches: Postgres, the API and the auth server.
-        run: npx supabase start -x studio,imgproxy,realtime,storage-api,edge-runtime,logflare,vector,supavisor,mailpit
+        # mailpit is the one exception, and it earned its place back: GoTrue's
+        # SMTP host in this stack is wired to it (config.toml's [local_smtp],
+        # exposed to the auth container as the legacy hostname
+        # supabase_inbucket_<project>) whenever [local_smtp] is enabled,
+        # regardless of whether any test reads the resulting mail. Excluding
+        # it doesn't make sending faster — it makes every send fail outright,
+        # with a DNS lookup error ("server misbehaving") on a hostname that
+        # simply doesn't exist without this container. That's not a
+        # hypothetical: it's the actual, sole cause of four straight
+        # supposedly-template CI failures on auth-magic-link.spec.ts, found
+        # only after chasing three real-but-irrelevant template bugs first —
+        # see docs/HANDYALLIANCE_ARCHITECTURE.md §5i for the full account.
+        run: npx supabase start -x studio,imgproxy,realtime,storage-api,edge-runtime,logflare,vector,supavisor
 
       - name: Point the app at the local stack
         run: |
@@ -308,6 +320,36 @@ jobs:
              from pg_proc p join pg_roles r on r.oid = p.proowner
              join pg_namespace n on n.oid = p.pronamespace
              where n.nspname = 'public' and p.proname in ('create_organization','import_jobs');" || true
+          # GoTrue's own log, not just the browser's notice. A failed auth
+          # request (e.g. the mailer choking on a template, or an email
+          # address failing GoTrue's own validator) shows only a generic
+          # message client-side; the reason lives in this container.
+          #
+          # Two rounds of this diagnostic already taught the same lesson
+          # twice, two different ways: a `--tail N` line-count window can miss
+          # the one request that matters entirely, because this suite's other
+          # tests generate enough of their own traffic (session polling, sign
+          # up/in audit events) to push it out of the window regardless of how
+          # generous N is (200, then 400 — both missed it; see
+          # docs/HANDYALLIANCE_ARCHITECTURE.md §5i). Excluding one noisy path
+          # at a time never keeps up with however many other paths are noisy
+          # this run. So: capture the whole log to a file first, no truncation
+          # at the capture step, then search it two ways that don't depend on
+          # volume at all — an inclusive keyword grep (rare terms stay rare no
+          # matter how much unrelated traffic surrounds them) and the
+          # container's actual environment (settles what GoTrue was even
+          # configured with, instead of inferring it from config.toml and
+          # hoping the CLI translated it the way expected).
+          docker ps -a --filter "name=auth" || true
+          AUTH_CONTAINER="$(docker ps -a --filter 'name=auth' --format '{{.Names}}' | head -1)"
+          docker logs "$AUTH_CONTAINER" > /tmp/gotrue-full.log 2>&1 || true
+          echo "---- GOTRUE_MAILER_* / GOTRUE_SMTP_* env actually passed to the container ----"
+          docker inspect "$AUTH_CONTAINER" --format '{{json .Config.Env}}' 2>/dev/null \
+            | tr ',' '\n' | grep -i 'MAILER\|SMTP' || true
+          echo "---- log lines mentioning the otp/mail/validation path, any error, any panic ----"
+          grep -iE 'otp|magiclink|magic_link|mail|valid|template|panic|error|unexpected_failure' /tmp/gotrue-full.log \
+            | grep -v 'GOTRUE_MAILER_EXTERNAL_HOSTS' \
+            | grep -v '"path":"/user"' || true
 
       - name: Stop the stack
         if: always()

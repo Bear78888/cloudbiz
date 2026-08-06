@@ -196,7 +196,13 @@ password_requirements = ""
 
 [auth.rate_limit]
 # Number of emails that can be sent per hour. Requires auth.email.smtp to be enabled.
-email_sent = 2
+# Local/CI only — raised from the CLI's default of 2 to match the other
+# per-hour ceilings below (30). The default is tuned for a human clicking
+# around; the e2e suite runs from one IP and 2 would leave no room for a
+# second spec that ever needs a magic link, let alone a Playwright retry.
+# This has no bearing on the live project's own limit, which is unrelated
+# config in the hosted dashboard.
+email_sent = 30
 # Number of SMS messages that can be sent per hour. Requires auth.sms to be enabled.
 sms_sent = 30
 # Number of anonymous sign-ins that can be made per hour per IP address. Requires enable_anonymous_sign_ins = true.
@@ -242,6 +248,29 @@ otp_expiry = 3600
 # pass = "env(SENDGRID_API_KEY)"
 # admin_email = "admin@email.com"
 # sender_name = "Admin"
+
+# On brand, bilingual (EN/ES via .Data.preferred_locale — see the file
+# comment), matching the estimate email's look. GoTrue only sends one
+# language per project natively; the templates carry both and pick one at
+# render time. `enable_confirmations` is off locally (see above) so this one
+# never actually fires in dev/CI — it exists so the local stack matches what
+# the live project is configured with, and so Studio's preview shows the real
+# thing rather than Supabase's stock copy.
+[auth.email.template.confirmation]
+subject = "{{ $locale := \"\" }}{{ with .Data }}{{ $locale = print .preferred_locale }}{{ end }}{{ if eq $locale \"es\" }}Confirma tu cuenta de HandyAlliance{{ else }}Confirm your HandyAlliance account{{ end }}"
+content_path = "./supabase/templates/confirmation.html"
+
+# This one does fire locally and in CI: "Email me a sign-in link" on the
+# sign-in page calls signInWithOtp() regardless of enable_confirmations. The
+# `{{ with .Data }}` guard in both subjects below is not decoration — see
+# confirmation.html for the two real bugs found in this exact spot (a naive
+# `eq .Data.preferred_locale`, then a `print(...)`-wrapped one that still
+# panicked on an untyped-nil `.Data`) and how each was diagnosed. Subjects
+# parse and execute as their own template, separate from the body, so they
+# need this guard independently rather than inheriting the body's fix.
+[auth.email.template.magic_link]
+subject = "{{ $locale := \"\" }}{{ with .Data }}{{ $locale = print .preferred_locale }}{{ end }}{{ if eq $locale \"es\" }}Tu enlace de acceso a HandyAlliance{{ else }}Your HandyAlliance sign-in link{{ end }}"
+content_path = "./supabase/templates/magic_link.html"
 
 # Uncomment to customize email template
 # [auth.email.template.invite]
