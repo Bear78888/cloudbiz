@@ -9,19 +9,24 @@
   confirmation.html for why.
 
   `.Data` is never touched directly in the branch condition — see
-  confirmation.html for the two bugs found in this exact spot and how each
-  was diagnosed. This is the template that actually caught both: it's the
-  one auth email that fires against the real local GoTrue stack in CI
+  confirmation.html for the three bugs found in this exact spot and how each
+  was diagnosed. This is the template that actually caught all of them: it's
+  the one auth email that fires against the real local GoTrue stack in CI
   (`enable_confirmations` is off locally, so signUp() never sends one), so
   every e2e run of `tests/e2e/auth-magic-link.spec.ts` exercised this file's
   real behavior, not just its syntax. Short version of the second bug, the
   one that survived the first fix: a brand-new user created through
   signInWithOtp()'s `create_user: true` path has `user.UserMetaData` come
   back as a bare untyped nil rather than a nil map, and `.Data.preferred_locale`
-  panics evaluating a field on that — before `print`/`eq` ever run. The
-  `{{ with .Data }}` guard below skips cleanly instead of erroring on nil of
-  any kind, confirmed by executing this exact template through Go's real
-  `html/template` package with both shapes.
+  panics evaluating a field on that — before `print`/`eq` ever run. Go's
+  `with` action below is the null-safe guard for that, confirmed by executing
+  this exact template through Go's real `html/template` package with every
+  shape `.Data` could plausibly take.
+
+  Do not spell that guard out in literal double-brace form anywhere in this
+  file's prose — see confirmation.html for why that's not a style nitpick:
+  an earlier draft of this exact paragraph did, and broke parsing outright
+  behind the same generic error as the two runtime bugs.
 -->
 {{ $locale := "" }}{{ with .Data }}{{ $locale = print .preferred_locale }}{{ end }}{{ if eq $locale "es" }}
 <!doctype html>

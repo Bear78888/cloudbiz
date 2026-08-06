@@ -11,11 +11,13 @@ import { describe, expect, it } from "vitest";
  * bug below was found and verified by executing the actual template content
  * through Go's real `html/template` package with the actual data shapes
  * GoTrue's own source produces, not by reasoning about the syntax from
- * outside. What's checked here is structural — an unbalanced `{{ if }}`, a
- * `content_path` that points at a file which does not exist, a button color
- * that quietly drifts from the rest of HandyAlliance mail — plus regression
- * guards against the two specific defects a real e2e run against the real
- * local GoTrue stack actually caught, in order:
+ * outside — that last part mattered enough to cost a whole extra CI
+ * round-trip on its own (bug 3 below). What's checked here is structural —
+ * an unbalanced `{{ if }}`, a `content_path` that points at a file which
+ * does not exist, a button color that quietly drifts from the rest of
+ * HandyAlliance mail — plus regression guards against three specific
+ * defects a real e2e run against the real local GoTrue stack actually
+ * caught, in order:
  *
  * 1. Comparing `.Data.preferred_locale` to "es" directly made signInWithOtp()
  *    fail outright (HTTP 500 "Error sending magic link email", not "wrong
@@ -29,9 +31,19 @@ import { describe, expect, it } from "vitest";
  *    erroring on nil of any kind — so the locale is read into a plain
  *    variable inside that guard, and every branch reads the variable, never
  *    `.Data` directly.
+ * 3. That guard was verified in isolation (a standalone template string) but
+ *    not re-verified in place after landing in the real file — and the real
+ *    file's own explanatory comment described the guard by spelling it out
+ *    in literal `{{ }}` form. Go's template lexer scans the *entire* raw
+ *    source for that delimiter; an HTML comment is not a template comment
+ *    and gives no protection. The unmatched `with` sitting in prose broke
+ *    parsing outright, behind the exact same generic 500 as bugs 1 and 2,
+ *    on every render — found only by re-executing the actual file on disk,
+ *    not the isolated snippet that had already passed.
  *
- * See supabase/templates/confirmation.html for the full account of both
- * bugs and docs/HANDYALLIANCE_ARCHITECTURE.md §5i for how each was diagnosed.
+ * See supabase/templates/confirmation.html for the full account of all
+ * three bugs and docs/HANDYALLIANCE_ARCHITECTURE.md §5i for how each was
+ * diagnosed.
  */
 
 const ROOT = join(__dirname, "..", "..");
@@ -62,17 +74,36 @@ describe.each(TEMPLATES)("$name.html", ({ name, spanishTell, englishTell }) => {
     const ifs = html!.match(/\{\{\s*if eq \$locale "es"\s*\}\}/g) ?? [];
     const elses = html!.match(/\{\{\s*else\s*\}\}/g) ?? [];
     const ends = html!.match(/\{\{\s*end\s*\}\}/g) ?? [];
-    // One functional `{{ with .Data }}`, plus one more quoted in the
-    // explanatory comment at the top of the file — same double-count shape
-    // as `.ConfirmationURL` below.
-    expect(withs).toHaveLength(2);
+    expect(withs).toHaveLength(1);
     expect(ifs).toHaveLength(1);
     expect(elses).toHaveLength(1);
     // One `end` closes the `with` guard, the other closes the `if`/`else`.
     expect(ends).toHaveLength(2);
   });
 
-  // The two specific defects a real e2e run against the real local GoTrue
+  // A third bug, found after the `with` guard above was already believed
+  // correct: the file's own explanatory comment spelled the guard out in
+  // literal double-brace form to describe it, and Go's template lexer does
+  // not know HTML comments are comments — it scans the entire raw file for
+  // that delimiter unconditionally. An unmatched `with` sitting in prose
+  // broke parsing outright, behind the exact same generic error as the two
+  // runtime bugs, on every render, in CI, discovered only by re-executing
+  // this exact file through Go's html/template rather than trusting a
+  // smaller isolated snippet test. This count is the general guard: every
+  // real action in this file is enumerated below, so a stray delimiter
+  // anywhere else — in a comment, in new prose, in a future edit — fails
+  // here instead of shipping.
+  it("has exactly the double-brace delimiters this file is supposed to have, no more", () => {
+    expect(html).toBeTruthy();
+    const total = (html!.match(/\{\{/g) ?? []).length;
+    // $locale:="", with .Data, $locale=print, end(with), if eq $locale"es",
+    // else, end(if) = 7 control/variable actions, plus 5 .ConfirmationURL
+    // output actions (4 functional + 1 quoted in the top comment, counted
+    // in the test below) = 12.
+    expect(total).toBe(12);
+  });
+
+  // The two runtime defects a real e2e run against the real local GoTrue
   // stack found, in order — see the file header above. Losing either guard
   // back out reintroduces a signInWithOtp()/signUp() failure that no amount
   // of "it looks right" review will catch without Docker.

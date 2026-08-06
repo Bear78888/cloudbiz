@@ -47,13 +47,28 @@
      engine; only the untyped-nil shape panics.
 
   The actual fix: never write `.Data.preferred_locale` where `.Data` might be
-  that untyped nil. `{{ with .Data }}` is null-safe by construction — it
+  that untyped nil. Go's `with` action is null-safe by construction — it
   skips its block instead of erroring when the piped value is nil/empty of
   any kind — so the locale is pulled into a plain variable inside that guard,
   and every branch below reads the variable, never `.Data` directly. Same
   construction in magic_link.html and in config.toml's subjects, which parse
   and execute as a fully separate template from the body and need the same
   guard independently.
+
+  A note on this comment itself, because it cost a whole extra CI round-trip
+  to find: nowhere in this file, including here, write the action delimiter
+  pair as adjacent characters — not even describing it. Go's template lexer
+  scans the entire raw source for that literal pair unconditionally; an HTML
+  comment carries no special meaning to it (a template-level comment is a
+  different, dedicated syntax, and this is prose, not that). An earlier
+  draft of this very paragraph spelled the real guard out that way, which
+  opened a genuine, unmatched control block with nothing in the prose to
+  close it and broke parsing outright on every render — the same observable
+  symptom as the two runtime bugs above (identical generic error, identical
+  on both languages), but from a third, unrelated cause found only by
+  re-executing this exact file through Go's `html/template`, not by
+  reasoning about the text. If this paragraph ever needs to name the guard
+  again: "with" and "end", named separately, never bracketed.
 -->
 {{ $locale := "" }}{{ with .Data }}{{ $locale = print .preferred_locale }}{{ end }}{{ if eq $locale "es" }}
 <!doctype html>
