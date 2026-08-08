@@ -7,7 +7,14 @@ import { getBusinessProfile } from "@/features/profile/service";
 import type { Locale } from "@/lib/routes";
 import { must } from "@/lib/supabase/query";
 
-import type { SiteColorPreset, SiteProfileFacts, SiteStatus, SiteTemplate, SiteTextContent } from "./model";
+import {
+  siteBlockers,
+  type SiteColorPreset,
+  type SiteProfileFacts,
+  type SiteStatus,
+  type SiteTemplate,
+  type SiteTextContent,
+} from "./model";
 import type { SiteContentInput, SiteSettingsInput } from "./schema";
 
 /**
@@ -229,6 +236,55 @@ export async function saveSiteSettings(
     // reads only the offered locales.
     console.error("[website] could not prune unused locales:", pruneError.message);
   }
+
+  return { ok: true };
+}
+
+/**
+ * Publishes or withdraws the site (§19.10).
+ *
+ * The readiness check is re-run here from the database rather than trusted from
+ * the page the button was on: that page may be minutes stale, and "publish"
+ * writes a page under someone's business name to an address strangers can open.
+ *
+ * Withdrawing has no such gate. Taking your own site down is never something to
+ * argue with.
+ */
+export async function setSiteStatus(
+  supabase: SupabaseClient,
+  organizationId: string,
+  next: SiteStatus,
+): Promise<{ ok: true } | { ok: false; error: "not_found" | "not_ready" | "generic" }> {
+  if (next === "published") {
+    const [profile, content] = await Promise.all([
+      getSiteProfile(supabase, organizationId),
+      listSiteContent(supabase, organizationId),
+    ]);
+    if (!profile) return { ok: false, error: "not_found" };
+
+    const blockers = siteBlockers({
+      slug: profile.slug,
+      locales: profile.locales,
+      profile,
+      content,
+    });
+    if (blockers.length > 0) return { ok: false, error: "not_ready" };
+  }
+
+  const { data, error } = await supabase
+    .from("business_sites")
+    .update({ status: next })
+    .eq("organization_id", organizationId)
+    .select("organization_id");
+
+  if (error) {
+    console.error("[website] status change failed:", error.message);
+    return { ok: false, error: "generic" };
+  }
+  // No row means there is no site to publish — the owner has never opened the
+  // settings screen. Reporting success would leave them waiting for a page that
+  // does not exist.
+  if (!data || data.length === 0) return { ok: false, error: "not_found" };
 
   return { ok: true };
 }

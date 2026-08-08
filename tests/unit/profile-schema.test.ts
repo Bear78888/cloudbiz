@@ -75,6 +75,27 @@ describe("parseProfileForm", () => {
     expect(result.value.businessHours.sun).toBeNull();
   });
 
+  it("treats no ticked days as 'not filled in', not as closed all week", () => {
+    // The difference is what a public website says: nothing about hours, or
+    // that the business never opens. The first version wrote seven nulls and
+    // the rendered page printed seven Closed rows.
+    const result = parseProfileForm({ open_days: [] });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.businessHours).toEqual({});
+  });
+
+  it("closes the unticked days once any day is open", () => {
+    const result = parseProfileForm({
+      open_days: ["mon"],
+      hours: { mon: { open: "08:00", close: "17:00" } },
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.businessHours.sat).toBeNull();
+    expect(result.value.businessHours.sun).toBeNull();
+  });
+
   it("refuses a day that closes before it opens", () => {
     expect(
       parseProfileForm({ open_days: ["tue"], hours: { tue: { open: "17:00", close: "08:00" } } }),

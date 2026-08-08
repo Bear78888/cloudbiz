@@ -162,9 +162,16 @@ export function parseProfileForm(raw: RawProfileForm): ProfileResult {
   // Hours are read from the days that are ticked, not from whichever time
   // inputs happen to carry a value: unticking Sunday has to close Sunday, and
   // the browser still posts the times sitting in its two boxes.
+  //
+  // With *nothing* ticked the answer is not "closed seven days a week" — it is
+  // "nobody has filled this in", and the difference is a public website that
+  // either says nothing about hours or announces that the business never opens.
+  // The first version of this wrote seven nulls and the site duly printed seven
+  // Closed rows; it was caught by the rendered page in an e2e test, which is
+  // the only place it was visible.
   const openDays = new Set(raw.open_days ?? []);
   const businessHours: BusinessHours = {};
-  for (const day of DAYS) {
+  for (const day of openDays.size === 0 ? [] : DAYS) {
     if (!openDays.has(day)) {
       businessHours[day] = null;
       continue;

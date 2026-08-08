@@ -5,7 +5,8 @@ import { notFound, redirect } from "next/navigation";
 import { getCurrentMembership } from "@/features/organizations/service";
 import { SiteContentForm } from "@/features/website/SiteContentForm";
 import { SiteSettingsForm } from "@/features/website/SiteSettingsForm";
-import { needsReview, siteBlockers, visibleBlocks } from "@/features/website/model";
+import { setSiteStatusAction } from "@/features/website/actions";
+import { needsReview, siteBlockers, siteUrl, visibleBlocks } from "@/features/website/model";
 import { contentFor, getSite, getSiteProfile, listSiteContent } from "@/features/website/service";
 import { resolveAppUrl } from "@/lib/app-url";
 import { getDict } from "@/lib/i18n";
@@ -41,16 +42,22 @@ const DEFAULT_SITE = {
  * Owner-only (§11.3): this is the copy the public reads under the owner's own
  * name, and the address it is served at is unique across the whole platform.
  *
- * Nothing here publishes anything. The page an owner builds on this screen is a
- * private draft (§19.10) until the publish step exists, which is the next
- * change — and the readiness list below is what it will check.
+ * What an owner builds here stays a private draft until they press Publish
+ * (§19.10), and the readiness list is what Publish checks — re-checked in the
+ * service against the database, because this page may be minutes stale by the
+ * time the button is pressed.
  */
 export default async function WebsiteSettingsPage({
   params,
   searchParams,
 }: {
   params: Promise<{ locale: string }>;
-  searchParams: Promise<{ content?: string }>;
+  searchParams: Promise<{
+    content?: string;
+    published?: string;
+    withdrawn?: string;
+    blocked?: string;
+  }>;
 }) {
   const { locale } = await params;
   if (!isLocale(locale)) notFound();
@@ -76,7 +83,7 @@ export default async function WebsiteSettingsPage({
   // Which language is being edited. Only ever one the site is actually offered
   // in: a `?content=es` on an English-only site would otherwise open an editor
   // for a page that will never be rendered.
-  const { content: requested } = await searchParams;
+  const { content: requested, published, withdrawn, blocked } = await searchParams;
   const contentLocale: Locale =
     requested && isLocale(requested) && profile.locales.includes(requested)
       ? requested
@@ -91,6 +98,21 @@ export default async function WebsiteSettingsPage({
   });
   const blocks = visibleBlocks(settings, profile, content);
   const baseUrl = resolveAppUrl();
+
+  const isPublished = site?.status === "published";
+  const liveUrl = profile.slug ? siteUrl(baseUrl, profile.slug, contentLocale) : null;
+
+  // Outcomes from `setSiteStatusAction`, which travel in the URL because this
+  // is a server component. Anything unrecognised is ignored rather than shown.
+  const notice = ((): { text: string; tone: "ok" | "problem" } | null => {
+    if (published) return { text: w.publishedNotice, tone: "ok" };
+    if (withdrawn) return { text: w.withdrawnNotice, tone: "ok" };
+    if (blocked === "not_ready") return { text: w.notReadyNotice, tone: "problem" };
+    if (blocked === "not_found") return { text: w.noSiteYetNotice, tone: "problem" };
+    if (blocked === "not_owner") return { text: w.notOwnerError, tone: "problem" };
+    if (blocked) return { text: w.genericError, tone: "problem" };
+    return null;
+  })();
 
   return (
     <div className="space-y-8">
@@ -128,7 +150,74 @@ export default async function WebsiteSettingsPage({
             </p>
           </>
         )}
-        <p className="mt-4 text-xs text-slate-500">{w.notPublishedYet}</p>
+      </section>
+
+      {/* Publishing (§19.10). Preview first, because it is the thing to do
+          before publishing and putting it after the button would be advice
+          nobody reads in time. */}
+      <section className="rounded-2xl border border-slate-200 bg-white p-5">
+        <h2 className="text-sm font-bold uppercase tracking-wide text-slate-500">
+          {w.publishTitle}
+        </h2>
+
+        {notice ? (
+          <p
+            role={notice.tone === "ok" ? "status" : "alert"}
+            className={
+              notice.tone === "ok"
+                ? "mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-900"
+                : "mt-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900"
+            }
+          >
+            {notice.text}
+          </p>
+        ) : null}
+
+        {/* Status is never carried by colour alone (§8.3). */}
+        <p className="mt-3 text-sm font-medium text-slate-800">
+          {isPublished ? w.statusPublished : w.statusDraft}
+        </p>
+
+        {isPublished && liveUrl ? (
+          <p className="mt-2 text-sm">
+            <a
+              href={liveUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-semibold text-brand-700 underline"
+            >
+              {liveUrl}
+            </a>
+          </p>
+        ) : null}
+
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <Link
+            href={`/${l}/app/settings/website/preview`}
+            className="inline-flex min-h-12 items-center rounded-xl border border-slate-300 px-5 font-semibold text-slate-800 hover:bg-slate-50"
+          >
+            {w.preview}
+          </Link>
+
+          <form action={setSiteStatusAction}>
+            <input type="hidden" name="locale" value={l} />
+            <input type="hidden" name="status" value={isPublished ? "draft" : "published"} />
+            <button
+              type="submit"
+              disabled={!isPublished && blockers.length > 0}
+              className={
+                isPublished
+                  ? "inline-flex min-h-12 items-center rounded-xl border border-slate-300 px-5 font-semibold text-slate-800 hover:bg-slate-50"
+                  : "inline-flex min-h-12 items-center rounded-xl bg-brand-600 px-6 font-semibold text-white hover:bg-brand-700 disabled:opacity-50"
+              }
+            >
+              {isPublished ? w.unpublish : w.publish}
+            </button>
+          </form>
+        </div>
+        <p className="mt-3 text-xs text-slate-500">
+          {isPublished ? w.unpublishHint : w.publishHint}
+        </p>
       </section>
 
       <section>

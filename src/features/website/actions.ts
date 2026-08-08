@@ -10,7 +10,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 import type { SiteContentActionState, SiteSettingsActionState } from "./action-state";
 import { parseSiteContentForm, parseSiteSettingsForm } from "./schema";
-import { saveSiteContent, saveSiteSettings } from "./service";
+import { saveSiteContent, saveSiteSettings, setSiteStatus } from "./service";
 
 /**
  * Server actions for the Business Website (§19).
@@ -78,6 +78,38 @@ export async function saveSiteSettingsAction(
 
   revalidatePath(`/${locale}/app/settings/website`);
   return { errors: {}, formError: null, saved: true };
+}
+
+/**
+ * Publish or withdraw (§19.10).
+ *
+ * A plain redirecting action rather than a form-state one: the answer the owner
+ * wants is the page reloading with a live address on it, and the reason for a
+ * refusal travels in the URL — the settings page is a server component, and a
+ * query parameter survives the redirect without inventing a session store for
+ * one sentence (same as the estimate actions).
+ */
+export async function setSiteStatusAction(formData: FormData): Promise<void> {
+  const locale = localeFrom(formData);
+  const next = String(formData.get("status") ?? "");
+
+  const { supabase, membership } = await requireContext();
+  if (!membership) redirect(`/${locale}/onboarding`);
+
+  const target = `/${locale}/app/settings/website`;
+  if (membership.role !== "owner") redirect(`${target}?blocked=not_owner`);
+  if (next !== "published" && next !== "draft") redirect(target);
+
+  const result = await setSiteStatus(supabase, membership.organizationId, next);
+
+  if (result.ok) {
+    trackServerEvent(next === "published" ? "website_published" : "website_unpublished", {
+      organization_id: membership.organizationId,
+    });
+  }
+
+  revalidatePath(target);
+  redirect(result.ok ? `${target}?${next === "published" ? "published" : "withdrawn"}=1` : `${target}?blocked=${result.error}`);
 }
 
 export async function saveSiteContentAction(
