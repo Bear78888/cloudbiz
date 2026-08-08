@@ -17,6 +17,22 @@ import { banner, formWith, newDraftEstimate, submitAndSettle } from "./helpers";
 
 const STUB_BASE = process.env.TRANSCRIBE_API_BASE ?? "http://127.0.0.1:4548";
 const STUB_STATE = process.env.TRANSCRIBE_STUB_STATE ?? "/tmp/transcribe-stub.json";
+// The AI-drafting stub (ai-stub.mjs) is one long-lived process for the whole
+// run, and its `nextReply` is deliberately settable per test (estimate-ai.spec.ts
+// uses that to test a low-confidence draft) — which also means it is *global*,
+// not scoped to a file. A test here that submits "Write a draft" without
+// stating its own expected reply is really asserting on whatever the last
+// spec file to touch the stub left behind, not on this test's own setup.
+const AI_STUB_BASE = process.env.AI_API_BASE ?? "http://127.0.0.1:4547";
+const AI_DEFAULT_REPLY = JSON.stringify({
+  scope: "Replace the leaking water heater and haul away the old unit.",
+  items: [
+    { item_type: "labor", description: "Installation, 3 hours", quantity: 3, unit_price: 95 },
+    { item_type: "material", description: "40-gallon water heater", quantity: 1, unit_price: 780 },
+  ],
+  confidence: 0.82,
+  assumptions: ["Standard 40-gallon tank", "Existing connections are to code"],
+});
 
 interface StubRequest {
   model: string;
@@ -54,6 +70,13 @@ test("a voice note becomes editable text, not an instant draft", async ({ page }
   expect(last!.file?.filename).toBe("note.webm");
 
   // Still just text in a textarea: editable, and nothing was drafted yet.
+  // What happens next tests the AI-draft form, not the voice note — state the
+  // model's reply explicitly rather than trust whatever an earlier spec file
+  // left the shared stub set to.
+  await page.request.post(`${AI_STUB_BASE}/__stub/reply`, {
+    data: AI_DEFAULT_REPLY,
+    headers: { "content-type": "text/plain" },
+  });
   await page.locator("#ai_description").fill("Replace the water heater, 40 gallon, garage only.");
   await submitAndSettle(page, page.getByRole("button", { name: /Write a draft/i }));
 

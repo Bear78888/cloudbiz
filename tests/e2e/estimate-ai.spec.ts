@@ -31,6 +31,28 @@ function sentToModel(): StubRequest[] {
   }
 }
 
+// Mirrors ai-stub.mjs's own initial `nextReply`. The stub is one long-lived
+// process for the whole run, not reset between files, so "a low-confidence
+// draft is flagged, not hidden" below — the one test here that overrides the
+// reply — leaves it overridden for whichever spec file happens to run next
+// and also calls "Write a draft" expecting an ordinary one.
+const DEFAULT_REPLY = JSON.stringify({
+  scope: "Replace the leaking water heater and haul away the old unit.",
+  items: [
+    { item_type: "labor", description: "Installation, 3 hours", quantity: 3, unit_price: 95 },
+    { item_type: "material", description: "40-gallon water heater", quantity: 1, unit_price: 780 },
+  ],
+  confidence: 0.82,
+  assumptions: ["Standard 40-gallon tank", "Existing connections are to code"],
+});
+
+test.afterEach(async ({ page }) => {
+  await page.request.post(`${STUB_BASE}/__stub/reply`, {
+    data: DEFAULT_REPLY,
+    headers: { "content-type": "text/plain" },
+  });
+});
+
 test("a description becomes a draft the owner still has to approve", async ({ page }) => {
   const { estimateUrl } = await newDraftEstimate(page, "ai-draft");
   const before = sentToModel().length;
