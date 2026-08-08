@@ -1268,6 +1268,8 @@ export const es: Dict = {
       previewOfPublished: "Vista previa de tu sitio publicado",
       backToSettings: "Volver a la configuración del sitio",
       publish: "Publicar",
+      republish: "Publicar los cambios",
+      republishHint: "Tu página en línea sigue mostrando la última versión publicada hasta que pulses esto. Darla de baja conserva todas las versiones.",
       unpublish: "Darlo de baja",
       publishHint:
         "Primero míralo en vista previa. Una vez publicado, cualquiera con la dirección puede leerlo.",

@@ -35,9 +35,16 @@ async function setHeadline(page: import("@playwright/test").Page, headline: stri
   );
 }
 
+/**
+ * Presses whichever button publishes right now.
+ *
+ * Two names on purpose: before the first publish it reads "Publish", after it
+ * "Publish changes". They used to be one toggle that turned into "Take it
+ * down", which meant an edit could never be published at all — caught here.
+ */
 async function publish(page: import("@playwright/test").Page) {
   await page.goto(WEBSITE_PATH);
-  await submitAndSettle(page, page.getByRole("button", { name: /^Publish$/ }));
+  await submitAndSettle(page, page.getByRole("button", { name: /^Publish( changes)?$/ }));
 }
 
 test("publishing freezes the page, and rollback destroys nothing", async ({ page, browser }) => {
@@ -64,6 +71,10 @@ test("publishing freezes the page, and rollback destroys nothing", async ({ page
   await publish(page);
   await expect(banner(page, "status", /live/i)).toBeVisible();
   await expect(visibleText(page, "Live version 1")).toBeVisible();
+  // Publishing an edit has to stay possible once the site is live. The single
+  // toggle that used to be here became "Take it down" and left no way to do it.
+  await expect(page.getByRole("button", { name: /^Publish changes$/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Take it down/i })).toBeVisible();
 
   const visitorContext = await browser.newContext();
   const visitor = await visitorContext.newPage();

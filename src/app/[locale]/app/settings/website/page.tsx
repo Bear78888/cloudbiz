@@ -217,24 +217,39 @@ export default async function WebsiteSettingsPage({
             {w.preview}
           </Link>
 
+          {/* Publishing and withdrawing are two buttons, not one toggle.
+              They were one, and it meant that after the first publish there
+              was no way to publish an edit at all: the only control on screen
+              said "Take it down". With versions, publishing again is the
+              ordinary action — every edit needs it — so it cannot be the thing
+              that disappears the moment it starts being useful. */}
           <form action={setSiteStatusAction}>
             <input type="hidden" name="locale" value={l} />
-            <input type="hidden" name="status" value={isPublished ? "draft" : "published"} />
+            <input type="hidden" name="status" value="published" />
             <button
               type="submit"
-              disabled={!isPublished && blockers.length > 0}
-              className={
-                isPublished
-                  ? "inline-flex min-h-12 items-center rounded-xl border border-slate-300 px-5 font-semibold text-slate-800 hover:bg-slate-50"
-                  : "inline-flex min-h-12 items-center rounded-xl bg-brand-600 px-6 font-semibold text-white hover:bg-brand-700 disabled:opacity-50"
-              }
+              disabled={blockers.length > 0}
+              className="inline-flex min-h-12 items-center rounded-xl bg-brand-600 px-6 font-semibold text-white hover:bg-brand-700 disabled:opacity-50"
             >
-              {isPublished ? w.unpublish : w.publish}
+              {isPublished ? w.republish : w.publish}
             </button>
           </form>
+
+          {isPublished ? (
+            <form action={setSiteStatusAction}>
+              <input type="hidden" name="locale" value={l} />
+              <input type="hidden" name="status" value="draft" />
+              <button
+                type="submit"
+                className="inline-flex min-h-12 items-center rounded-xl border border-slate-300 px-5 font-semibold text-slate-800 hover:bg-slate-50"
+              >
+                {w.unpublish}
+              </button>
+            </form>
+          ) : null}
         </div>
         <p className="mt-3 text-xs text-slate-500">
-          {isPublished ? w.unpublishHint : w.publishHint}
+          {isPublished ? w.republishHint : w.publishHint}
         </p>
       </section>
 

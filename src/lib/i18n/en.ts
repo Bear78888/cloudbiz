@@ -1288,6 +1288,8 @@ export const en = {
       previewOfPublished: "Preview of your published site",
       backToSettings: "Back to website settings",
       publish: "Publish",
+      republish: "Publish changes",
+      republishHint: "Your live page keeps showing the last published version until you press this. Taking it down keeps every version.",
       unpublish: "Take it down",
       publishHint: "Preview it first. Once published, anyone with the address can read it.",
       unpublishHint: "Taking it down makes the address stop working. Your content is kept.",
