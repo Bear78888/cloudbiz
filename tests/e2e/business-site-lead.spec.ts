@@ -69,11 +69,19 @@ test("a stranger's enquiry becomes a job in the tracker", async ({ page, browser
   await visitor.locator("#lead_description").fill("Kitchen tap is dripping badly.");
   await visitor.locator("#lead_date").fill("2026-08-20");
 
-  // §19.7's consent box is genuinely required, not decorative.
-  await submitAndSettle(visitor, visitor.getByRole("button", { name: /^Send$/ }));
-  await expect(visitor.getByText(/Please fill this in/i).first()).toBeVisible();
+  // §19.7's consent box is genuinely required, not decorative. The browser
+  // refuses to submit without it, so there is no request to wait for — asserted
+  // through validity rather than by clicking, because a native block sends
+  // nothing at all. The server refuses an unticked box too (`parseLeadForm`),
+  // which is what a crafted POST would meet.
+  const consent = visitor.getByRole("checkbox");
+  expect(await consent.evaluate((el: HTMLInputElement) => el.checkValidity())).toBe(false);
+  expect(
+    await visitor.locator("form").first().evaluate((el: HTMLFormElement) => el.checkValidity()),
+  ).toBe(false);
 
-  await visitor.getByRole("checkbox").check();
+  await consent.check();
+  expect(await consent.evaluate((el: HTMLInputElement) => el.checkValidity())).toBe(true);
   await submitAndSettle(visitor, visitor.getByRole("button", { name: /^Send$/ }));
   await expect(visitor.getByText(/on its way/i)).toBeVisible();
 
