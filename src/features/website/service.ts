@@ -2,6 +2,8 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { isServiceAreaEmpty } from "@/features/profile/model";
+import { getBusinessProfile } from "@/features/profile/service";
 import type { Locale } from "@/lib/routes";
 import { must } from "@/lib/supabase/query";
 
@@ -83,39 +85,29 @@ export async function getSite(
  * The facts the site is built from (§19.10: "the site is created from the
  * business profile").
  *
- * Services and the service area are counted rather than returned: this is the
- * settings screen asking whether there is anything to render, and the blocks
- * themselves read the profile directly when they render. §19.8 forbids invented
- * service areas, so "how many are there" is the only honest question here.
+ * Read through the profile feature's own parsers rather than by picking at the
+ * jsonb here. Two readers of an untyped column drift, and the direction this
+ * one would drift in is visible: counting `Object.keys(service_area)` called an
+ * area "set" when it held `{zipCodes: [], cities: []}` — an empty area that
+ * would have switched the Service Area block on with nothing in it, which is
+ * the §19.8 failure this whole file is careful about.
  */
 export async function getSiteProfile(
   supabase: SupabaseClient,
   organizationId: string,
 ): Promise<SiteProfileRecord | null> {
-  const row = await must(
-    supabase
-      .from("business_profiles")
-      .select(
-        "display_name, phone, email, services, service_area, google_review_url, supported_locales, website_slug",
-      )
-      .eq("organization_id", organizationId)
-      .maybeSingle(),
-    "website:get-profile",
-  );
-  if (!row) return null;
-
-  const services = Array.isArray(row.services) ? row.services : [];
-  const serviceArea = (row.service_area ?? {}) as Record<string, unknown>;
+  const profile = await getBusinessProfile(supabase, organizationId);
+  if (!profile) return null;
 
   return {
-    displayName: row.display_name as string,
-    phone: (row.phone as string | null) ?? null,
-    email: (row.email as string | null) ?? null,
-    serviceCount: services.length,
-    hasServiceArea: Object.keys(serviceArea).length > 0,
-    googleReviewUrl: (row.google_review_url as string | null) ?? null,
-    slug: (row.website_slug as string | null) ?? null,
-    locales: ((row.supported_locales as string[] | null) ?? ["en"]) as Locale[],
+    displayName: profile.displayName,
+    phone: profile.phone,
+    email: profile.email,
+    serviceCount: profile.services.length,
+    hasServiceArea: !isServiceAreaEmpty(profile.serviceArea),
+    googleReviewUrl: profile.googleReviewUrl,
+    slug: profile.websiteSlug,
+    locales: profile.supportedLocales as Locale[],
   };
 }
 
