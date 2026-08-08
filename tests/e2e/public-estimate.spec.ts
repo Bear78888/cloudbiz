@@ -1,15 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import {
-  banner,
-  createJob,
-  createOrganization,
-  formWith,
-  signUp,
-  submitAndSettle,
-  uniqueEmail,
-  visibleText,
-} from "./helpers";
+import { banner, sendAnEstimate, submitAndSettle, visibleText } from "./helpers";
 
 /**
  * The customer-facing estimate link (§16).
@@ -26,43 +17,11 @@ const CUSTOMER = {
   email: "marta.delgado@example.test",
 };
 
-/** Signs up an owner and gets an approved, sent estimate. Returns its link. */
-async function sendAnEstimate(page: import("@playwright/test").Page, total: string) {
-  await signUp(page, uniqueEmail("public-est"));
-  await createOrganization(page, `Public Link Test ${Date.now().toString(36)}`);
-
-  const jobUrl = await createJob(page, {
-    customer: CUSTOMER.name,
-    phone: CUSTOMER.phone,
-    title: "Water heater replacement",
-  });
-
-  await submitAndSettle(page, page.getByRole("button", { name: /Create estimate/i }));
-  await page.waitForURL(/\/estimates\/[0-9a-f-]{36}/, { timeout: 30_000 });
-  const estimateUrl = page.url();
-
-  await page.locator("#item_description_0").fill("Water heater, installed");
-  await page.locator("#item_unit_price_0").fill(total);
-  await submitAndSettle(
-    page,
-    formWith(page, "#title").getByRole("button", { name: /Save estimate/i }),
-  );
-
-  await page.goto(estimateUrl);
-  await submitAndSettle(page, page.getByRole("button", { name: /^Approve$/ }));
-  await page.goto(estimateUrl);
-  await submitAndSettle(page, page.getByRole("button", { name: /Mark as sent/i }));
-
-  await page.goto(estimateUrl);
-  const link = await page.locator("#customer-link").inputValue();
-  return { link, estimateUrl, jobUrl };
-}
-
 test("the customer opens the link, sees only the estimate, and accepts", async ({
   page,
   browser,
 }) => {
-  const { link, estimateUrl, jobUrl } = await sendAnEstimate(page, "1450");
+  const { link, estimateUrl, jobUrl } = await sendAnEstimate(page, "1450", CUSTOMER);
 
   expect(link).toMatch(/\/e\/en\/[A-Za-z0-9_-]{43}$/);
 

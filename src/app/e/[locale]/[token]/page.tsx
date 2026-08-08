@@ -122,6 +122,14 @@ export default async function PublicEstimatePage({
       {estimate.sentAt ? (
         <p className="mt-1 text-sm text-slate-600">{formatDate(estimate.sentAt, l, "UTC")}</p>
       ) : null}
+      <a
+        href={`/e/${locale}/${token}/pdf`}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="mt-2 inline-block text-sm font-semibold text-brand-700 underline"
+      >
+        {p.downloadPdf}
+      </a>
 
       {estimate.status === "accepted" ? (
         <p

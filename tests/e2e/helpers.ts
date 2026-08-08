@@ -116,3 +116,42 @@ export async function createJob(page: Page, job: JobInput): Promise<string> {
   await page.waitForURL(/\/en\/app\/jobs\/[0-9a-f-]{36}$/, { timeout: 30_000 });
   return page.url();
 }
+
+/**
+ * Signs up a fresh owner and gets an approved, sent estimate (§16.5, §16.9).
+ * Returns everything a test needs to act as either the owner or the customer.
+ */
+export async function sendAnEstimate(
+  page: Page,
+  total: string,
+  customer: { name: string; phone?: string; email?: string } = { name: "Marta Delgado" },
+): Promise<{ link: string; estimateUrl: string; jobUrl: string }> {
+  await signUp(page, uniqueEmail("public-est"));
+  await createOrganization(page, `Public Link Test ${Date.now().toString(36)}`);
+
+  const jobUrl = await createJob(page, {
+    customer: customer.name,
+    phone: customer.phone,
+    title: "Water heater replacement",
+  });
+
+  await submitAndSettle(page, page.getByRole("button", { name: /Create estimate/i }));
+  await page.waitForURL(/\/estimates\/[0-9a-f-]{36}/, { timeout: 30_000 });
+  const estimateUrl = page.url();
+
+  await page.locator("#item_description_0").fill("Water heater, installed");
+  await page.locator("#item_unit_price_0").fill(total);
+  await submitAndSettle(
+    page,
+    formWith(page, "#title").getByRole("button", { name: /Save estimate/i }),
+  );
+
+  await page.goto(estimateUrl);
+  await submitAndSettle(page, page.getByRole("button", { name: /^Approve$/ }));
+  await page.goto(estimateUrl);
+  await submitAndSettle(page, page.getByRole("button", { name: /Mark as sent/i }));
+
+  await page.goto(estimateUrl);
+  const link = await page.locator("#customer-link").inputValue();
+  return { link, estimateUrl, jobUrl };
+}
