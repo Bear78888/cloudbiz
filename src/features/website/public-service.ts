@@ -144,3 +144,41 @@ export async function defaultLocaleForSite(slug: string): Promise<Locale | null>
   const snapshot = versionRow ? parseSnapshot(versionRow.snapshot) : null;
   return snapshot?.profile.supportedLocales[0] ?? null;
 }
+
+/**
+ * The organization behind a published address, and nothing else.
+ *
+ * Used by the lead form (§19.7): the submission says which *page* it came from,
+ * never which business it is for, so this is the only thing that decides whose
+ * job list a stranger's enquiry lands in. An unpublished or unknown slug
+ * resolves to null and the enquiry is refused — a form posted at a site that is
+ * not public must not write into that business's tracker.
+ */
+export async function organizationForPublishedSlug(slug: string): Promise<string | null> {
+  if (slugProblem(slug) !== null) return null;
+
+  const supabase = createSupabaseAdminClient();
+
+  const profileRow = await must(
+    supabase
+      .from("business_profiles")
+      .select("organization_id")
+      .eq("website_slug", slug)
+      .maybeSingle(),
+    "public-site:lead-organization",
+  );
+  if (!profileRow) return null;
+
+  const organizationId = profileRow.organization_id as string;
+
+  const siteRow = await must(
+    supabase
+      .from("business_sites")
+      .select("organization_id")
+      .eq("organization_id", organizationId)
+      .eq("status", "published")
+      .maybeSingle(),
+    "public-site:lead-published",
+  );
+  return siteRow ? organizationId : null;
+}

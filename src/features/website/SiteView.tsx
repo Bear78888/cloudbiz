@@ -3,6 +3,7 @@ import { type Dict } from "@/lib/i18n";
 import type { Locale } from "@/lib/routes";
 
 import type { SiteBlock } from "./model";
+import { LeadForm } from "./LeadForm";
 import { serviceAreaLine, type RenderableSite } from "./render";
 import { layoutFor, paletteFor } from "./theme";
 
@@ -26,10 +27,13 @@ export function SiteView({
   dict,
   /** Where the language switch points. Absent in the preview, which has no public URLs. */
   hrefForLocale,
+  /** False in the preview: see the note by the form. */
+  canSubmitLeads = false,
 }: {
   site: RenderableSite;
   dict: Dict;
   hrefForLocale?: (locale: Locale) => string;
+  canSubmitLeads?: boolean;
 }) {
   const p = dict.publicSite;
   const palette = paletteFor(site.colorPreset);
@@ -211,6 +215,19 @@ export function SiteView({
                 </li>
               ) : null}
             </ul>
+
+            {/* §19.7. Only on the real page: the preview has no slug to post
+                to, and an owner filling in their own contact form would create
+                a lead for themselves. */}
+            {canSubmitLeads ? (
+              <LeadForm
+                dict={dict}
+                locale={site.locale}
+                slug={site.slug}
+                services={site.services}
+                buttonClass={palette.button}
+              />
+            ) : null}
 
             {DAYS.some((day) => site.hours[day] !== undefined) ? (
               <>

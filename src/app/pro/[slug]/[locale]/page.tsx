@@ -85,6 +85,7 @@ export default async function PublicSitePage({
       site={published.site}
       dict={getDict(l)}
       hrefForLocale={(other) => `/pro/${slug}/${other}`}
+      canSubmitLeads
     />
   );
 }
