@@ -88,12 +88,12 @@ test("a stranger's enquiry becomes a job in the tracker", async ({ page, browser
   // The payoff: it is in the owner's tracker, as a new lead from the website.
   await page.goto("/en/app/jobs");
   await expect(visibleText(page, "Dana Ruiz")).toBeVisible();
-  // `visibleText`, not `.first()`: the list renders both layouts and hides one
-  // with CSS (§13.9), so a bare first-match resolves to the hidden copy and the
-  // click waits forever. The helpers say so; this is what ignoring them looks
-  // like.
-  await visibleText(page, "Drain cleaning").click();
-  await page.waitForURL(/\/app\/jobs\/[0-9a-f-]{36}/, { timeout: 30_000 });
+  // Opened by the row's own link, the way `job-tracker.spec.ts` does it. The
+  // service text is a <p>: clicking it hits the right row and navigates
+  // nowhere, and the list renders both layouts with one hidden by CSS (§13.9),
+  // so a bare text locator finds the invisible copy first.
+  await page.getByRole("link", { name: "Open" }).first().click();
+  await page.waitForURL(/\/en\/app\/jobs\/[0-9a-f-]{36}$/, { timeout: 30_000 });
 
   await expect(visibleText(page, "Kitchen tap is dripping badly.")).toBeVisible();
   // The preferred date is in the description, never on the schedule: a date a
