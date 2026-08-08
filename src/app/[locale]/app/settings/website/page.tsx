@@ -109,11 +109,24 @@ export default async function WebsiteSettingsPage({
         {blockers.length === 0 ? (
           <p className="mt-3 text-sm font-medium text-emerald-800">{w.readyBody}</p>
         ) : (
-          <ul className="mt-3 space-y-1.5 text-sm text-slate-700">
-            {blockers.map((blocker) => (
-              <li key={blocker}>• {w.blockers[blocker]}</li>
-            ))}
-          </ul>
+          <>
+            <ul className="mt-3 space-y-1.5 text-sm text-slate-700">
+              {blockers.map((blocker) => (
+                <li key={blocker}>• {w.blockers[blocker]}</li>
+              ))}
+            </ul>
+            {/* Two of these live on the business profile, not here. Saying so
+                with a link is the difference between a checklist and a
+                checklist someone can act on. */}
+            <p className="mt-3 text-sm">
+              <Link
+                href={`/${l}/app/settings/business`}
+                className="font-semibold text-brand-700 underline"
+              >
+                {w.profileLink}
+              </Link>
+            </p>
+          </>
         )}
         <p className="mt-4 text-xs text-slate-500">{w.notPublishedYet}</p>
       </section>

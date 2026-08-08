@@ -819,6 +819,48 @@ begin
     raise exception 'FAIL(19d): a message was recorded as sent with no provider id';
   end if;
 
+  -- 19f. The business profile (§10.2 steps 3–5) gets its first writer with the
+  -- Business Website, so the owner-only rule on it is worth an assertion rather
+  -- than an assumption: staff read the details, the owner changes them.
+  perform pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+  update public.business_profiles
+    set phone = '(512) 555-0134',
+        services = '[{"name": {"en": "Drain cleaning"}}]'::jsonb,
+        service_area = '{"zipCodes": ["78701"], "cities": []}'::jsonb
+    where organization_id = org_a;
+  if not exists (
+    select 1 from public.business_profiles
+    where organization_id = org_a and phone = '(512) 555-0134'
+  ) then
+    raise exception 'FAIL(19f): the owner could not fill in their own business profile';
+  end if;
+
+  perform pg_temp.act_as('00000000-0000-0000-0000-00000000000c');
+  if not exists (select 1 from public.business_profiles where organization_id = org_a) then
+    raise exception 'FAIL(19g): staff member cannot read their organization''s profile';
+  end if;
+
+  update public.business_profiles set phone = '(512) 555-9999' where organization_id = org_a;
+  if exists (
+    select 1 from public.business_profiles
+    where organization_id = org_a and phone = '(512) 555-9999'
+  ) then
+    raise exception 'FAIL(19h): a staff member changed the business phone number';
+  end if;
+
+  -- The jsonb columns are lists and objects, and the public site renders them.
+  perform pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+  mutation_blocked := false;
+  begin
+    update public.business_profiles set services = '"drain cleaning"'::jsonb
+      where organization_id = org_a;
+  exception when check_violation then
+    mutation_blocked := true;
+  end;
+  if not mutation_blocked then
+    raise exception 'FAIL(19i): a bare string was accepted as the services list';
+  end if;
+
   -- 20. Business Website (§19).
   --
   -- Read by the whole organization, written only by its owner: this is the copy
