@@ -24,7 +24,7 @@ test("the owner can preview a PDF of their own estimate, any status", async ({ p
   expect(body.subarray(0, 5).toString("latin1")).toBe("%PDF-");
 });
 
-test("a signed-out request for someone else's estimate PDF is not found, not the PDF", async ({
+test("a signed-out request for someone else's estimate PDF never reaches the PDF", async ({
   page,
   browser,
 }) => {
@@ -33,10 +33,17 @@ test("a signed-out request for someone else's estimate PDF is not found, not the
 
   const strangerContext = await browser.newContext();
   const stranger = await strangerContext.newPage();
-  const response = await stranger.request.get(pdfUrl);
-  // Same `notFound()` the page itself uses when there's no membership — a 404,
-  // not a 200 with someone else's numbers in it.
-  expect(response.status()).toBe(404);
+  // This path is under /app/, which middleware.ts redirects to sign-in before
+  // the route handler ever runs — its own `notFound()` on a missing
+  // membership only fires for a *signed-in* user with no access, a different
+  // case from signed-out entirely. Redirects are followed by default, and
+  // the sign-in page is itself a normal 200, so asserting a status code on
+  // the followed response would pass even if the redirect target were wrong;
+  // `maxRedirects: 0` inspects the actual redirect instead.
+  const response = await stranger.request.get(pdfUrl, { maxRedirects: 0 });
+  expect(response.status()).toBeGreaterThanOrEqual(300);
+  expect(response.status()).toBeLessThan(400);
+  expect(response.headers()["location"] ?? "").toContain("/sign-in");
   await strangerContext.close();
 });
 
