@@ -121,6 +121,25 @@ test("a published site is the contractor's page and advertises nothing of ours",
   // Unlike the estimate link, this page is meant to be found (§19.8).
   await expect(visitor.locator('meta[name="robots"]')).toHaveCount(0);
 
+  // §19.8 structured data. `textContent` rather than `innerText`: a script is
+  // not rendered text, so `innerText` returns nothing however much is in it.
+  const jsonLdText = await visitor.locator('script[type="application/ld+json"]').textContent();
+  const jsonLd = JSON.parse(jsonLdText ?? "{}") as Record<string, unknown>;
+  expect(jsonLd["@type"]).toBe("LocalBusiness");
+  expect(jsonLd.name).toBe(`Public Site ${stamp}`);
+  expect(jsonLd.telephone).toBe("(512) 555-0134");
+  // The same prohibitions as the page, asked of the markup nobody reads.
+  expect(jsonLd).not.toHaveProperty("aggregateRating");
+  expect(jsonLd).not.toHaveProperty("review");
+  expect(jsonLd).not.toHaveProperty("address");
+
+  // §19.8 sitemap: one per business, at the business's own address.
+  const sitemap = await visitor.request.get(`/pro/${slug}/sitemap.xml`);
+  expect(sitemap.status()).toBe(200);
+  const sitemapXml = await sitemap.text();
+  expect(sitemapXml).toContain(`/pro/${slug}/en`);
+  expect(sitemapXml).toContain("<lastmod>");
+
   // Taking it down makes the address stop working, and keeps the content.
   await page.goto(WEBSITE_PATH);
   await submitAndSettle(page, page.getByRole("button", { name: /Take it down/i }));
@@ -129,6 +148,32 @@ test("a published site is the contractor's page and advertises nothing of ours",
 
   const afterWithdrawal = await visitor.request.get(`/pro/${slug}/en`, { maxRedirects: 0 });
   expect(afterWithdrawal.status()).toBe(404);
+  // And the sitemap stops pointing at it, rather than advertising a 404.
+  const sitemapAfter = await visitor.request.get(`/pro/${slug}/sitemap.xml`, { maxRedirects: 0 });
+  expect(sitemapAfter.status()).toBe(404);
+});
+
+/**
+ * `robots.txt` (§19.8), which is one file for the whole host.
+ *
+ * The contractor's page is meant to be crawled; the signed-in screens and a
+ * customer's copy of an estimate are not. A `noindex` meta tag on those is only
+ * read after the page has been fetched, which is one request too late.
+ */
+test("robots.txt invites crawlers to the public pages and nowhere else", async ({
+  page,
+  baseURL,
+}) => {
+  const response = await page.request.get("/robots.txt");
+  expect(response.status()).toBe(200);
+  const body = await response.text();
+
+  expect(body).toContain("Disallow: /e/");
+  expect(body).toContain("Disallow: /*/app");
+  expect(body).not.toMatch(/Disallow: \/pro/);
+  // The sitemap it names is this deployment's own address, not a domain
+  // written into the source that may point somewhere else entirely.
+  expect(body).toContain(`Sitemap: ${baseURL}/sitemap.xml`);
 });
 
 test("an unfinished site cannot be published, and an unknown address gives nothing away", async ({

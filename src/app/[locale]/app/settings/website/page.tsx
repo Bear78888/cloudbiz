@@ -10,7 +10,13 @@ import {
   setSiteStatusAction,
   translateSiteContentAction,
 } from "@/features/website/actions";
-import { needsReview, siteBlockers, siteUrl, visibleBlocks } from "@/features/website/model";
+import {
+  needsReview,
+  siteBlockers,
+  siteSitemapUrl,
+  siteUrl,
+  visibleBlocks,
+} from "@/features/website/model";
 import {
   contentFor,
   getSite,
@@ -134,6 +140,7 @@ export default async function WebsiteSettingsPage({
   const isPublished = site?.status === "published";
   const liveVersion = versions.find((entry) => entry.isLive)?.version ?? null;
   const liveUrl = profile.slug ? siteUrl(baseUrl, profile.slug, contentLocale) : null;
+  const sitemapUrl = profile.slug ? siteSitemapUrl(baseUrl, profile.slug) : null;
 
   // Outcomes from `setSiteStatusAction`, which travel in the URL because this
   // is a server component. Anything unrecognised is ignored rather than shown.
@@ -232,6 +239,25 @@ export default async function WebsiteSettingsPage({
             >
               {liveUrl}
             </a>
+          </p>
+        ) : null}
+
+        {/* §19.8. Only once the site is live, because that is when the address
+            starts answering — offering it earlier would send an owner to Search
+            Console to submit a file that 404s. */}
+        {isPublished && sitemapUrl ? (
+          <p className="mt-3 text-xs text-slate-500">
+            <span className="font-semibold text-slate-600">{w.sitemapTitle}:</span>{" "}
+            <a
+              href={sitemapUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline"
+            >
+              {sitemapUrl}
+            </a>
+            <br />
+            {w.sitemapHint}
           </p>
         ) : null}
 

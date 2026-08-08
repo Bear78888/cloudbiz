@@ -3,9 +3,10 @@ import { notFound } from "next/navigation";
 
 import { SiteView } from "@/features/website/SiteView";
 import { getPublishedSite } from "@/features/website/public-service";
+import { buildLocalBusinessJsonLd, jsonLdScriptText, siteDescription } from "@/features/website/seo";
 import { resolveAppUrl } from "@/lib/app-url";
 import { getDict } from "@/lib/i18n";
-import { isLocale, type Locale } from "@/lib/routes";
+import { isLocale, LOCALE_TAGS, type Locale } from "@/lib/routes";
 
 /**
  * A contractor's published website (§19.6).
@@ -39,32 +40,43 @@ export async function generateMetadata({
 
   const { site } = published;
   const base = resolveAppUrl();
+  const canonical = base ? `${base}/pro/${slug}/${locale}` : null;
 
   // The description is the owner's own words, never generated: §19.8 forbids
   // inventing copy, and a meta description is copy that ends up in a search
   // result under their name.
-  const description = site.subheadline ?? site.aboutText?.slice(0, 160) ?? undefined;
+  const description = siteDescription(site);
+  const title = `${site.businessName} — ${site.headline}`;
 
   return {
-    title: `${site.businessName} — ${site.headline}`,
+    title,
     description,
-    alternates: base
+    alternates: canonical
       ? {
-          canonical: `${base}/pro/${slug}/${locale}`,
+          canonical,
           languages: Object.fromEntries(
-            [locale as Locale, ...site.otherLocales].map((other) => [
-              other === "es" ? "es-US" : "en-US",
+            [site.locale, ...site.otherLocales].map((other) => [
+              LOCALE_TAGS[other],
               `${base}/pro/${slug}/${other}`,
             ]),
           ),
         }
       : undefined,
     openGraph: {
-      title: `${site.businessName} — ${site.headline}`,
+      title,
       description,
       type: "website",
+      // The business's name, because on this page there is no other site (§19).
+      siteName: site.businessName,
+      url: canonical ?? undefined,
       locale: locale === "es" ? "es_US" : "en_US",
+      alternateLocale: site.otherLocales.map((other) => (other === "es" ? "es_US" : "en_US")),
     },
+    // A share card with no image is a card with a title and a description on it,
+    // which is what this page has until photo upload exists (§19.8 image
+    // optimization, alt text). `summary` says so; `summary_large_image` would
+    // promise an image that is not there.
+    twitter: { card: "summary", title, description },
   };
 }
 
@@ -80,12 +92,28 @@ export default async function PublicSitePage({
   const published = await getPublishedSite(slug, l);
   if (!published) notFound();
 
+  const base = resolveAppUrl();
+  const jsonLd = buildLocalBusinessJsonLd(
+    published.site,
+    base ? `${base}/pro/${slug}/${l}` : null,
+  );
+
   return (
-    <SiteView
-      site={published.site}
-      dict={getDict(l)}
-      hrefForLocale={(other) => `/pro/${slug}/${other}`}
-      canSubmitLeads
-    />
+    <>
+      {/* §19.8 LocalBusiness structured data. Rendered on the page rather than
+          returned from `generateMetadata`, which has no way to emit a script.
+          Every value in it is already visible above — see `seo.ts` for why that
+          is a rule and not a coincidence. */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: jsonLdScriptText(jsonLd) }}
+      />
+      <SiteView
+        site={published.site}
+        dict={getDict(l)}
+        hrefForLocale={(other) => `/pro/${slug}/${other}`}
+        canSubmitLeads
+      />
+    </>
   );
 }

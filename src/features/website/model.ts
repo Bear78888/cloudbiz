@@ -175,6 +175,18 @@ export function siteUrl(baseUrl: string | null, slug: string, locale: string): s
   return `${baseUrl.replace(/\/$/, "")}/pro/${slug}/${locale}`;
 }
 
+/**
+ * Where this site's sitemap lives (§19.8).
+ *
+ * Worth showing an owner, unlike most machine-facing addresses: submitting it
+ * in Google Search Console is the one thing they can do that makes their page
+ * found sooner, and nobody would guess the address.
+ */
+export function siteSitemapUrl(baseUrl: string | null, slug: string): string | null {
+  if (!baseUrl || slug.trim() === "") return null;
+  return `${baseUrl.replace(/\/$/, "")}/pro/${slug}/sitemap.xml`;
+}
+
 export interface SiteTextContent {
   locale: string;
   headline: string | null;
