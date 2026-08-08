@@ -1227,6 +1227,13 @@ export const es: Dict = {
       },
       contentSection: "Contenido de la página",
       contentLocaleLabel: "Idioma que estás editando",
+      translateFrom: "Redactar esta página desde {language}",
+      translateHint: "El modelo escribe un primer borrador. Léelo, corrige lo que no esté bien y guarda: tu guardado es lo que lo marca revisado, y nada se publica hasta entonces.",
+      translatedNotice: "Abajo hay un borrador de traducción. Léelo antes de publicar.",
+      translateLimitNotice: "Ya usaste las traducciones de hoy. Inténtalo mañana.",
+      translateOffNotice: "La traducción automática todavía no está activada. Igual puedes escribir esta página tú.",
+      translateNoSourceNotice: "Escribe primero el otro idioma: todavía no hay nada que traducir.",
+      translateFailedNotice: "La traducción no llegó. No se cambió nada.",
       translationNeedsReview:
         "Este texto se redactó automáticamente. Léelo, corrige lo que no esté bien y guarda: eso es lo que lo marca revisado.",
       headlineField: "Titular",

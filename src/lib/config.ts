@@ -99,7 +99,16 @@ export const LIMITS = {
   },
   reviews_followups: { includedSms: 200 },
   bad_lead_refund_helper: { includedAnalyses: 10 },
-  business_website: { sitesPerOrganization: 1 },
+  /**
+   * One site per organization, and a ceiling on machine translation.
+   *
+   * The site itself is unlimited to edit; what has a cap is calls to the model
+   * (§19.5), for the same reason the estimate drafts do — a $12/month tool with
+   * uncapped inference is a tool whose economics arrive with the bill. Ten a
+   * day is far more than translating one page needs and low enough to notice a
+   * loop.
+   */
+  business_website: { sitesPerOrganization: 1, aiTranslationsPerDay: 10 },
 } as const;
 
 export interface TradeConfig {

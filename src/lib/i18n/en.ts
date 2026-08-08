@@ -1247,6 +1247,13 @@ export const en = {
       },
       contentSection: "Page content",
       contentLocaleLabel: "Language being edited",
+      translateFrom: "Draft this page from {language}",
+      translateHint: "The model writes a first draft. Read it, fix anything that isn't right, and save — your save is what marks it checked, and nothing publishes until you do.",
+      translatedNotice: "A draft translation is ready below. Read it before publishing.",
+      translateLimitNotice: "You've used today's translations. Try again tomorrow.",
+      translateOffNotice: "Automatic translation isn't turned on yet. You can still write this page yourself.",
+      translateNoSourceNotice: "Write the other language first — there's nothing to translate from yet.",
+      translateFailedNotice: "The translation didn't come back. Nothing was changed.",
       translationNeedsReview:
         "This text was drafted automatically. Read it, fix anything that isn't right, and save — that's what marks it checked.",
       headlineField: "Headline",
