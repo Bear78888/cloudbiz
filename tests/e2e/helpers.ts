@@ -117,6 +117,22 @@ export async function createJob(page: Page, job: JobInput): Promise<string> {
   return page.url();
 }
 
+/** Signs up a fresh owner and opens a brand-new draft estimate (§16.2–16.4). */
+export async function newDraftEstimate(
+  page: Page,
+  prefix: string,
+): Promise<{ estimateUrl: string; jobUrl: string }> {
+  await signUp(page, uniqueEmail(prefix));
+  await createOrganization(page, `AI Test ${Date.now().toString(36)}`);
+  const jobUrl = await createJob(page, {
+    customer: "Marta Delgado",
+    title: "Water heater replacement",
+  });
+  await submitAndSettle(page, page.getByRole("button", { name: /Create estimate/i }));
+  await page.waitForURL(/\/estimates\/[0-9a-f-]{36}/, { timeout: 30_000 });
+  return { estimateUrl: page.url(), jobUrl };
+}
+
 /**
  * Signs up a fresh owner and gets an approved, sent estimate (§16.5, §16.9).
  * Returns everything a test needs to act as either the owner or the customer.

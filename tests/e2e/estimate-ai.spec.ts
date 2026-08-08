@@ -2,16 +2,7 @@ import { readFileSync } from "node:fs";
 
 import { expect, test } from "@playwright/test";
 
-import {
-  banner,
-  createJob,
-  createOrganization,
-  formWith,
-  signUp,
-  submitAndSettle,
-  uniqueEmail,
-  visibleText,
-} from "./helpers";
+import { banner, formWith, newDraftEstimate, submitAndSettle, visibleText } from "./helpers";
 
 /**
  * Drafting an estimate with the model (§16.2–16.4, §27.3).
@@ -38,18 +29,6 @@ function sentToModel(): StubRequest[] {
   } catch {
     return [];
   }
-}
-
-async function newDraftEstimate(page: import("@playwright/test").Page, prefix: string) {
-  await signUp(page, uniqueEmail(prefix));
-  await createOrganization(page, `AI Test ${Date.now().toString(36)}`);
-  const jobUrl = await createJob(page, {
-    customer: "Marta Delgado",
-    title: "Water heater replacement",
-  });
-  await submitAndSettle(page, page.getByRole("button", { name: /Create estimate/i }));
-  await page.waitForURL(/\/estimates\/[0-9a-f-]{36}/, { timeout: 30_000 });
-  return { estimateUrl: page.url(), jobUrl };
 }
 
 test("a description becomes a draft the owner still has to approve", async ({ page }) => {

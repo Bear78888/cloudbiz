@@ -2,12 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import {
-  changeEstimateStatusAction,
-  generateEstimateAction,
-  sendEstimateAction,
-} from "@/features/estimates/actions";
+import { changeEstimateStatusAction, sendEstimateAction } from "@/features/estimates/actions";
 import { confidenceBand } from "@/features/ai/estimate-draft";
+import { AiDraftForm } from "@/features/estimates/AiDraftForm";
 import { EstimateEditor } from "@/features/estimates/EstimateEditor";
 import { isEditable, isReleased } from "@/features/estimates/model";
 import { getEstimate } from "@/features/estimates/service";
@@ -334,42 +331,17 @@ export default async function EstimatePage({
         </section>
       ) : null}
 
-      {/* §16.2: describe the job, get a starting point. Only on something still
-          editable — regenerating a sent document would rewrite what a customer
-          was asked to agree to. */}
+      {/* §16.2, §16.3: describe the job — by typing or by voice note — and get
+          a starting point. Only on something still editable — regenerating a
+          sent document would rewrite what a customer was asked to agree to. */}
       {isEditable(estimate.status) ? (
-        <form
-          action={generateEstimateAction}
-          className="rounded-2xl border border-slate-200 bg-white p-5"
-        >
-          <input type="hidden" name="locale" value={l} />
-          <input type="hidden" name="job_id" value={jobId} />
-          <input type="hidden" name="estimate_id" value={estimate.id} />
-          <input type="hidden" name="tax_rate" value={estimate.taxRate} />
-          <h2 className="text-sm font-bold uppercase tracking-wide text-slate-500">
-            {e.aiSection}
-          </h2>
-          <label htmlFor="ai_description" className="mt-3 block text-sm text-slate-600">
-            {e.aiDescriptionLabel}
-          </label>
-          <textarea
-            id="ai_description"
-            name="description"
-            rows={3}
-            maxLength={4000}
-            placeholder={e.aiDescriptionPlaceholder}
-            className="mt-1.5 block w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200"
-          />
-          <div className="mt-3 flex flex-wrap items-center gap-3">
-            <button
-              type="submit"
-              className="min-h-12 rounded-xl border-2 border-brand-200 bg-white px-5 font-semibold text-brand-800 hover:border-brand-400 hover:bg-brand-50"
-            >
-              {e.aiDraftButton}
-            </button>
-            <span className="text-xs text-slate-500">{e.aiReplacesLines}</span>
-          </div>
-        </form>
+        <AiDraftForm
+          locale={l}
+          dict={dict}
+          jobId={jobId}
+          estimateId={estimate.id}
+          taxRate={Number(estimate.taxRate)}
+        />
       ) : null}
 
       {/* Not `!released`: an expired estimate was never released and is still
