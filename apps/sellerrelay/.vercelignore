@@ -1,0 +1,4 @@
+.sellerrelay-dev
+*.log
+.env*
+!.env.example
