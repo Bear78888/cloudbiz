@@ -88,7 +88,11 @@ test("a stranger's enquiry becomes a job in the tracker", async ({ page, browser
   // The payoff: it is in the owner's tracker, as a new lead from the website.
   await page.goto("/en/app/jobs");
   await expect(visibleText(page, "Dana Ruiz")).toBeVisible();
-  await page.getByText("Drain cleaning").first().click();
+  // `visibleText`, not `.first()`: the list renders both layouts and hides one
+  // with CSS (§13.9), so a bare first-match resolves to the hidden copy and the
+  // click waits forever. The helpers say so; this is what ignoring them looks
+  // like.
+  await visibleText(page, "Drain cleaning").click();
   await page.waitForURL(/\/app\/jobs\/[0-9a-f-]{36}/, { timeout: 30_000 });
 
   await expect(visibleText(page, "Kitchen tap is dripping badly.")).toBeVisible();
