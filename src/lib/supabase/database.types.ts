@@ -150,6 +150,84 @@ export type Database = {
         };
         Relationships: [];
       };
+      business_site_texts: {
+        Row: {
+          about_text: string | null;
+          ai_generated_at: string | null;
+          created_at: string;
+          cta_text: string | null;
+          faq: Json;
+          headline: string | null;
+          locale: string;
+          organization_id: string;
+          reviewed_at: string | null;
+          service_area_note: string | null;
+          subheadline: string | null;
+          updated_at: string;
+          why_choose_us: Json;
+        };
+        Insert: {
+          about_text?: string | null;
+          ai_generated_at?: string | null;
+          created_at?: string;
+          cta_text?: string | null;
+          faq?: Json;
+          headline?: string | null;
+          locale: string;
+          organization_id: string;
+          reviewed_at?: string | null;
+          service_area_note?: string | null;
+          subheadline?: string | null;
+          updated_at?: string;
+          why_choose_us?: Json;
+        };
+        Update: {
+          about_text?: string | null;
+          ai_generated_at?: string | null;
+          created_at?: string;
+          cta_text?: string | null;
+          faq?: Json;
+          headline?: string | null;
+          locale?: string;
+          organization_id?: string;
+          reviewed_at?: string | null;
+          service_area_note?: string | null;
+          subheadline?: string | null;
+          updated_at?: string;
+          why_choose_us?: Json;
+        };
+        Relationships: [];
+      };
+      business_sites: {
+        Row: {
+          color_preset: string;
+          created_at: string;
+          hidden_blocks: string[];
+          organization_id: string;
+          status: string;
+          template: string;
+          updated_at: string;
+        };
+        Insert: {
+          color_preset?: string;
+          created_at?: string;
+          hidden_blocks?: string[];
+          organization_id: string;
+          status?: string;
+          template?: string;
+          updated_at?: string;
+        };
+        Update: {
+          color_preset?: string;
+          created_at?: string;
+          hidden_blocks?: string[];
+          organization_id?: string;
+          status?: string;
+          template?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       customers: {
         Row: {
           address: string | null;

@@ -55,9 +55,14 @@ export default async function AppLayout({
               {dict.platform.jobs.nav}
             </Link>
             {membership.role === "owner" ? (
-              <Link href={`/${l}/app/billing`} className="hover:text-slate-900">
-                {d.navBilling}
-              </Link>
+              <>
+                <Link href={`/${l}/app/settings/website`} className="hover:text-slate-900">
+                  {dict.platform.website.nav}
+                </Link>
+                <Link href={`/${l}/app/billing`} className="hover:text-slate-900">
+                  {d.navBilling}
+                </Link>
+              </>
             ) : null}
           </nav>
           <div className="ml-auto flex items-center gap-3 text-sm">

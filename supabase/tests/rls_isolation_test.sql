@@ -819,6 +819,134 @@ begin
     raise exception 'FAIL(19d): a message was recorded as sent with no provider id';
   end if;
 
+  -- 20. Business Website (§19).
+  --
+  -- Read by the whole organization, written only by its owner: this is the copy
+  -- the public reads under the owner's own name, at an address that is unique
+  -- across the platform.
+  perform pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+  insert into public.business_sites (organization_id, template, color_preset)
+  values (org_a, 'classic', 'navy');
+
+  if not exists (select 1 from public.business_sites where organization_id = org_a) then
+    raise exception 'FAIL(20a): the owner cannot read their own site';
+  end if;
+
+  -- 20b. Staff see it — they answer the phone the page produces — but cannot
+  -- change what the business says about itself.
+  perform pg_temp.act_as('00000000-0000-0000-0000-00000000000c');
+  if not exists (select 1 from public.business_sites where organization_id = org_a) then
+    raise exception 'FAIL(20b): staff member cannot read their organization''s site';
+  end if;
+
+  update public.business_sites set template = 'bold' where organization_id = org_a;
+  if exists (
+    select 1 from public.business_sites where organization_id = org_a and template = 'bold'
+  ) then
+    raise exception 'FAIL(20c): a staff member changed the website''s template';
+  end if;
+
+  -- 20d. Another tenant sees nothing and can plant nothing.
+  perform pg_temp.act_as('00000000-0000-0000-0000-00000000000b');
+  if exists (select 1 from public.business_sites where organization_id = org_a) then
+    raise exception 'FAIL(20d): organization B can read organization A''s site';
+  end if;
+
+  mutation_blocked := false;
+  begin
+    insert into public.business_sites (organization_id) values (org_a);
+  exception when others then
+    mutation_blocked := true;
+  end;
+  if not mutation_blocked then
+    raise exception 'FAIL(20e): organization B created a site for organization A';
+  end if;
+
+  -- 20f. §19.9: the look is a closed set, not a free-text field that becomes
+  -- bespoke design one customer at a time.
+  perform pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+  mutation_blocked := false;
+  begin
+    update public.business_sites set template = 'bespoke' where organization_id = org_a;
+  exception when check_violation then
+    mutation_blocked := true;
+  end;
+  if not mutation_blocked then
+    raise exception 'FAIL(20f): an unapproved template was accepted';
+  end if;
+
+  -- 20g. A block that cannot be switched off must not be recordable as hidden.
+  -- The gallery is the one that matters: storing it as hidden today would leave
+  -- every site switched off on the day photo upload ships.
+  mutation_blocked := false;
+  begin
+    update public.business_sites
+      set hidden_blocks = array['gallery']
+      where organization_id = org_a;
+  exception when check_violation then
+    mutation_blocked := true;
+  end;
+  if not mutation_blocked then
+    raise exception 'FAIL(20g): the gallery was recorded as a hidden block';
+  end if;
+
+  -- Switching off a block that *is* optional is ordinary editing.
+  update public.business_sites
+    set hidden_blocks = array['faq', 'reviews']
+    where organization_id = org_a;
+  if not exists (
+    select 1 from public.business_sites
+    where organization_id = org_a and hidden_blocks @> array['faq']
+  ) then
+    raise exception 'FAIL(20h): the owner could not switch a block off';
+  end if;
+
+  -- 20i. Content is per language, and only the two the platform has.
+  insert into public.business_site_texts (organization_id, locale, headline)
+  values (org_a, 'en', 'Licensed plumbing, same-day service');
+
+  mutation_blocked := false;
+  begin
+    insert into public.business_site_texts (organization_id, locale) values (org_a, 'fr');
+  exception when check_violation then
+    mutation_blocked := true;
+  end;
+  if not mutation_blocked then
+    raise exception 'FAIL(20i): content was accepted for a language the platform does not have';
+  end if;
+
+  -- 20j. The list columns are lists. A malformed write here would break the
+  -- rendered page for every visitor, not only for whoever made it.
+  mutation_blocked := false;
+  begin
+    update public.business_site_texts
+      set faq = '{"question": "orphan"}'::jsonb
+      where organization_id = org_a and locale = 'en';
+  exception when check_violation then
+    mutation_blocked := true;
+  end;
+  if not mutation_blocked then
+    raise exception 'FAIL(20j): a non-array was accepted as the FAQ';
+  end if;
+
+  -- 20k. Staff can read the text and cannot rewrite it.
+  perform pg_temp.act_as('00000000-0000-0000-0000-00000000000c');
+  if not exists (
+    select 1 from public.business_site_texts where organization_id = org_a and locale = 'en'
+  ) then
+    raise exception 'FAIL(20k): staff member cannot read the site text';
+  end if;
+
+  update public.business_site_texts
+    set headline = 'Rewritten by staff'
+    where organization_id = org_a and locale = 'en';
+  if exists (
+    select 1 from public.business_site_texts
+    where organization_id = org_a and headline = 'Rewritten by staff'
+  ) then
+    raise exception 'FAIL(20l): a staff member rewrote the website''s headline';
+  end if;
+
   perform set_config('request.jwt.claim.sub', '', true);
   perform set_config('role', 'anon', true);
   begin
@@ -848,6 +976,31 @@ begin
     when insufficient_privilege then null; -- expected
     when others then
       if sqlerrm like 'FAIL(18k)%' then raise; end if;
+      raise;
+  end;
+
+  -- 20m. The site's content is destined to be public, and is still not
+  -- readable through the Data API: §19.10 requires that a private draft is not
+  -- publicly available, and an anon grant would hand every unpublished draft on
+  -- the platform to anyone who asks PostgREST for one. The published page is
+  -- rendered by server code, which knows what has been published.
+  begin
+    perform 1 from public.business_sites limit 1;
+    raise exception 'FAIL(20m): anon can read business sites';
+  exception
+    when insufficient_privilege then null; -- expected: refused at the grant layer
+    when others then
+      if sqlerrm like 'FAIL(20m)%' then raise; end if;
+      raise;
+  end;
+
+  begin
+    perform 1 from public.business_site_texts limit 1;
+    raise exception 'FAIL(20n): anon can read unpublished site content';
+  exception
+    when insufficient_privilege then null; -- expected
+    when others then
+      if sqlerrm like 'FAIL(20n)%' then raise; end if;
       raise;
   end;
 

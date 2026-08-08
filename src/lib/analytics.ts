@@ -25,6 +25,8 @@ export const ANALYTICS_EVENTS = [
   "estimate_sent",
   "estimate_ai_drafted",
   "estimate_voice_transcribed",
+  "website_settings_saved",
+  "website_content_saved",
   "google_connect_started",
   "google_connected",
   "google_sync_failed",
