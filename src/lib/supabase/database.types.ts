@@ -198,12 +198,43 @@ export type Database = {
         };
         Relationships: [];
       };
+      business_site_versions: {
+        Row: {
+          created_at: string;
+          id: string;
+          organization_id: string;
+          published_at: string;
+          published_by: string | null;
+          snapshot: Json;
+          version: number;
+        };
+        Insert: {
+          created_at?: string;
+          id?: string;
+          organization_id: string;
+          published_at?: string;
+          published_by?: string | null;
+          snapshot: Json;
+          version: number;
+        };
+        Update: {
+          created_at?: string;
+          id?: string;
+          organization_id?: string;
+          published_at?: string;
+          published_by?: string | null;
+          snapshot?: Json;
+          version?: number;
+        };
+        Relationships: [];
+      };
       business_sites: {
         Row: {
           color_preset: string;
           created_at: string;
           hidden_blocks: string[];
           organization_id: string;
+          published_version_id: string | null;
           status: string;
           template: string;
           updated_at: string;
@@ -213,6 +244,7 @@ export type Database = {
           created_at?: string;
           hidden_blocks?: string[];
           organization_id: string;
+          published_version_id?: string | null;
           status?: string;
           template?: string;
           updated_at?: string;
@@ -222,6 +254,7 @@ export type Database = {
           created_at?: string;
           hidden_blocks?: string[];
           organization_id?: string;
+          published_version_id?: string | null;
           status?: string;
           template?: string;
           updated_at?: string;

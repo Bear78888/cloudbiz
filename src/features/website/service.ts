@@ -16,6 +16,7 @@ import {
   type SiteTextContent,
 } from "./model";
 import type { SiteContentInput, SiteSettingsInput } from "./schema";
+import { buildSnapshot } from "./snapshot";
 
 /**
  * Business Website storage (§19).
@@ -34,6 +35,8 @@ export interface SiteRecord {
   colorPreset: SiteColorPreset;
   status: SiteStatus;
   hiddenBlocks: string[];
+  /** The version the public is reading, or null before the first publish. */
+  publishedVersionId: string | null;
   updatedAt: string;
 }
 
@@ -71,7 +74,7 @@ export async function getSite(
   const row = await must(
     supabase
       .from("business_sites")
-      .select("organization_id, template, color_preset, status, hidden_blocks, updated_at")
+      .select("organization_id, template, color_preset, status, hidden_blocks, published_version_id, updated_at")
       .eq("organization_id", organizationId)
       .maybeSingle(),
     "website:get-site",
@@ -84,6 +87,7 @@ export async function getSite(
     colorPreset: row.color_preset as SiteColorPreset,
     status: row.status as SiteStatus,
     hiddenBlocks: (row.hidden_blocks as string[] | null) ?? [],
+    publishedVersionId: (row.published_version_id as string | null) ?? null,
     updatedAt: row.updated_at as string,
   };
 }
@@ -250,42 +254,216 @@ export async function saveSiteSettings(
  * Withdrawing has no such gate. Taking your own site down is never something to
  * argue with.
  */
+export type PublishError = "not_found" | "not_ready" | "generic";
+
 export async function setSiteStatus(
   supabase: SupabaseClient,
   organizationId: string,
   next: SiteStatus,
-): Promise<{ ok: true } | { ok: false; error: "not_found" | "not_ready" | "generic" }> {
-  if (next === "published") {
-    const [profile, content] = await Promise.all([
-      getSiteProfile(supabase, organizationId),
-      listSiteContent(supabase, organizationId),
-    ]);
-    if (!profile) return { ok: false, error: "not_found" };
+  actorId: string | null = null,
+): Promise<{ ok: true } | { ok: false; error: PublishError }> {
+  if (next === "draft") return withdrawSite(supabase, organizationId);
+  return publishSite(supabase, organizationId, actorId);
+}
 
-    const blockers = siteBlockers({
-      slug: profile.slug,
-      locales: profile.locales,
-      profile,
-      content,
-    });
-    if (blockers.length > 0) return { ok: false, error: "not_ready" };
+/**
+ * Publishes the current draft as a new version (§19.10).
+ *
+ * Publishing writes a snapshot and points the site at it. It is deliberately
+ * not "flip a status": with the public page reading live rows, every keystroke
+ * an owner typed afterwards would be on the internet immediately, and there
+ * would be nothing for a rollback to return to.
+ *
+ * The readiness check runs here, against the database, rather than being
+ * trusted from the page the button was on — that page may be minutes stale, and
+ * this writes a page under a business's name to an address strangers can open.
+ */
+export async function publishSite(
+  supabase: SupabaseClient,
+  organizationId: string,
+  actorId: string | null,
+): Promise<{ ok: true } | { ok: false; error: PublishError }> {
+  const [site, profile, fullProfile, content] = await Promise.all([
+    getSite(supabase, organizationId),
+    getSiteProfile(supabase, organizationId),
+    getBusinessProfile(supabase, organizationId),
+    listSiteContent(supabase, organizationId),
+  ]);
+
+  // No site row means the owner has never saved their settings. Reporting
+  // success would leave them waiting for a page that does not exist.
+  if (!site || !profile || !fullProfile || !profile.slug) {
+    return { ok: false, error: "not_found" };
   }
 
+  const blockers = siteBlockers({
+    slug: profile.slug,
+    locales: profile.locales,
+    profile,
+    content,
+  });
+  if (blockers.length > 0) return { ok: false, error: "not_ready" };
+
+  const snapshot = buildSnapshot({
+    slug: profile.slug,
+    site: {
+      template: site.template,
+      colorPreset: site.colorPreset,
+      hiddenBlocks: site.hiddenBlocks,
+    },
+    profile: {
+      displayName: fullProfile.displayName,
+      ownerName: fullProfile.ownerName,
+      phone: fullProfile.phone,
+      email: fullProfile.email,
+      services: fullProfile.services,
+      serviceArea: fullProfile.serviceArea,
+      businessHours: fullProfile.businessHours,
+      googleReviewUrl: fullProfile.googleReviewUrl,
+      supportedLocales: profile.locales,
+    },
+    content,
+  });
+
+  // The number comes from what exists rather than from a counter held here:
+  // two publishes at once must not both claim version 4, and the unique index
+  // would reject the second.
+  const existing = await must(
+    supabase
+      .from("business_site_versions")
+      .select("version")
+      .eq("organization_id", organizationId)
+      .order("version", { ascending: false })
+      .limit(1),
+    "website:last-version",
+  );
+  const nextVersion = ((existing ?? [])[0]?.version ?? 0) + 1;
+
+  const { data: created, error: versionError } = await supabase
+    .from("business_site_versions")
+    .insert({
+      organization_id: organizationId,
+      version: nextVersion,
+      snapshot: snapshot as unknown as Record<string, unknown>,
+      published_by: actorId,
+    })
+    .select("id")
+    .single();
+
+  if (versionError || !created) {
+    console.error("[website] could not write the version:", versionError?.message);
+    return { ok: false, error: "generic" };
+  }
+
+  const { error } = await supabase
+    .from("business_sites")
+    .update({ status: "published", published_version_id: created.id })
+    .eq("organization_id", organizationId);
+
+  if (error) {
+    // The version row survives. It is append-only by design, and an orphan
+    // snapshot nobody points at costs a row; the alternative — deleting it — is
+    // the one thing this table refuses to do.
+    console.error("[website] version written but not published:", error.message);
+    return { ok: false, error: "generic" };
+  }
+
+  return { ok: true };
+}
+
+/**
+ * Takes the site down.
+ *
+ * `published_version_id` is left where it is on purpose: it records what the
+ * public last read, which is worth keeping, and nothing serves it while the
+ * status is `draft`.
+ */
+export async function withdrawSite(
+  supabase: SupabaseClient,
+  organizationId: string,
+): Promise<{ ok: true } | { ok: false; error: PublishError }> {
   const { data, error } = await supabase
     .from("business_sites")
-    .update({ status: next })
+    .update({ status: "draft" })
     .eq("organization_id", organizationId)
     .select("organization_id");
 
   if (error) {
-    console.error("[website] status change failed:", error.message);
+    console.error("[website] withdrawal failed:", error.message);
     return { ok: false, error: "generic" };
   }
-  // No row means there is no site to publish — the owner has never opened the
-  // settings screen. Reporting success would leave them waiting for a page that
-  // does not exist.
   if (!data || data.length === 0) return { ok: false, error: "not_found" };
+  return { ok: true };
+}
 
+export interface SiteVersionSummary {
+  id: string;
+  version: number;
+  publishedAt: string;
+  isLive: boolean;
+}
+
+export async function listSiteVersions(
+  supabase: SupabaseClient,
+  organizationId: string,
+  publishedVersionId: string | null,
+): Promise<SiteVersionSummary[]> {
+  const rows = await must(
+    supabase
+      .from("business_site_versions")
+      .select("id, version, published_at")
+      .eq("organization_id", organizationId)
+      .order("version", { ascending: false })
+      .limit(20),
+    "website:versions",
+  );
+
+  return (rows ?? []).map((row) => ({
+    id: row.id as string,
+    version: row.version as number,
+    publishedAt: row.published_at as string,
+    isLive: row.id === publishedVersionId,
+  }));
+}
+
+/**
+ * Rolls back to an earlier version (§19.10).
+ *
+ * Moves the pointer. Nothing is edited and nothing is deleted — the version
+ * being rolled *away from* is exactly what someone may want back ten minutes
+ * later, and the table refuses to lose it either way.
+ *
+ * The version's ownership is re-checked here rather than trusted from the form:
+ * an id in a POST is not evidence that it belongs to the organization asking.
+ * RLS would refuse to read someone else's, which is what makes the check work.
+ */
+export async function rollbackSite(
+  supabase: SupabaseClient,
+  organizationId: string,
+  versionId: string,
+): Promise<{ ok: true } | { ok: false; error: PublishError }> {
+  const target = await must(
+    supabase
+      .from("business_site_versions")
+      .select("id")
+      .eq("organization_id", organizationId)
+      .eq("id", versionId)
+      .maybeSingle(),
+    "website:rollback-target",
+  );
+  if (!target) return { ok: false, error: "not_found" };
+
+  const { data, error } = await supabase
+    .from("business_sites")
+    .update({ status: "published", published_version_id: versionId })
+    .eq("organization_id", organizationId)
+    .select("organization_id");
+
+  if (error) {
+    console.error("[website] rollback failed:", error.message);
+    return { ok: false, error: "generic" };
+  }
+  if (!data || data.length === 0) return { ok: false, error: "not_found" };
   return { ok: true };
 }
 

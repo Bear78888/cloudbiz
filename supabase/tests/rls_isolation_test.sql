@@ -38,6 +38,7 @@ declare
   job_b uuid;
   job_outbox uuid;
   estimate_a uuid;
+  site_version_a uuid;
   import_result jsonb;
   relation_name text;
 begin
@@ -989,8 +990,110 @@ begin
     raise exception 'FAIL(20l): a staff member rewrote the website''s headline';
   end if;
 
+  -- 21. Published site versions (§19.10).
+  --
+  -- Append-only is the whole promise: rolling back moves a pointer, and the
+  -- version someone rolled away from is exactly what they may want back.
+  perform pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+  insert into public.business_site_versions (organization_id, version, snapshot)
+  values (org_a, 1, '{"profile": {"displayName": "Alpha Plumbing"}}'::jsonb)
+  returning id into site_version_a;
+
+  update public.business_sites
+    set status = 'published', published_version_id = site_version_a
+    where organization_id = org_a;
+
+  if not exists (
+    select 1 from public.business_sites
+    where organization_id = org_a and published_version_id = site_version_a
+  ) then
+    raise exception 'FAIL(21a): the owner could not publish a version';
+  end if;
+
+  -- 21b. A version cannot be edited, even by the owner who wrote it.
+  mutation_blocked := false;
+  begin
+    update public.business_site_versions set snapshot = '{}'::jsonb where id = site_version_a;
+  exception when others then
+    mutation_blocked := true;
+  end;
+  if not mutation_blocked then
+    raise exception 'FAIL(21b): a published version was rewritten';
+  end if;
+
+  -- 21c. Nor deleted — including the one currently live, which the FK also
+  -- refuses on its own.
+  mutation_blocked := false;
+  begin
+    delete from public.business_site_versions where id = site_version_a;
+  exception when others then
+    mutation_blocked := true;
+  end;
+  if not mutation_blocked then
+    raise exception 'FAIL(21c): a published version was deleted';
+  end if;
+
+  -- 21d. "Published" has to mean there is something to serve. Without this,
+  -- `status = 'published'` could be true with nothing behind it.
+  mutation_blocked := false;
+  begin
+    update public.business_sites
+      set published_version_id = null
+      where organization_id = org_a;
+  exception when check_violation then
+    mutation_blocked := true;
+  end;
+  if not mutation_blocked then
+    raise exception 'FAIL(21d): a site stayed published with no version';
+  end if;
+
+  -- 21e. Two versions cannot claim the same number.
+  mutation_blocked := false;
+  begin
+    insert into public.business_site_versions (organization_id, version, snapshot)
+    values (org_a, 1, '{}'::jsonb);
+  exception when unique_violation then
+    mutation_blocked := true;
+  end;
+  if not mutation_blocked then
+    raise exception 'FAIL(21e): two versions claimed the same number';
+  end if;
+
+  -- 21f. Staff read the history and cannot publish.
+  perform pg_temp.act_as('00000000-0000-0000-0000-00000000000c');
+  if not exists (select 1 from public.business_site_versions where organization_id = org_a) then
+    raise exception 'FAIL(21f): staff member cannot read the version history';
+  end if;
+
+  mutation_blocked := false;
+  begin
+    insert into public.business_site_versions (organization_id, version, snapshot)
+    values (org_a, 2, '{}'::jsonb);
+  exception when others then
+    mutation_blocked := true;
+  end;
+  if not mutation_blocked then
+    raise exception 'FAIL(21g): a staff member published a version';
+  end if;
+
+  -- 21h. Another tenant sees nothing.
+  perform pg_temp.act_as('00000000-0000-0000-0000-00000000000b');
+  if exists (select 1 from public.business_site_versions where organization_id = org_a) then
+    raise exception 'FAIL(21h): organization B can read organization A''s versions';
+  end if;
+
   perform set_config('request.jwt.claim.sub', '', true);
   perform set_config('role', 'anon', true);
+  begin
+    perform 1 from public.business_site_versions limit 1;
+    raise exception 'FAIL(21i): anon can read published versions';
+  exception
+    when insufficient_privilege then null; -- expected: refused at the grant layer
+    when others then
+      if sqlerrm like 'FAIL(21i)%' then raise; end if;
+      raise;
+  end;
+
   begin
     perform 1 from public.outbound_emails limit 1;
     raise exception 'FAIL(19e): anon can read the delivery log';

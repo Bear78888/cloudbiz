@@ -5,11 +5,17 @@ import { notFound, redirect } from "next/navigation";
 import { getCurrentMembership } from "@/features/organizations/service";
 import { SiteContentForm } from "@/features/website/SiteContentForm";
 import { SiteSettingsForm } from "@/features/website/SiteSettingsForm";
-import { setSiteStatusAction } from "@/features/website/actions";
+import { rollbackSiteAction, setSiteStatusAction } from "@/features/website/actions";
 import { needsReview, siteBlockers, siteUrl, visibleBlocks } from "@/features/website/model";
-import { contentFor, getSite, getSiteProfile, listSiteContent } from "@/features/website/service";
+import {
+  contentFor,
+  getSite,
+  getSiteProfile,
+  listSiteContent,
+  listSiteVersions,
+} from "@/features/website/service";
 import { resolveAppUrl } from "@/lib/app-url";
-import { getDict } from "@/lib/i18n";
+import { fmt, getDict } from "@/lib/i18n";
 import { isLocale, type Locale } from "@/lib/routes";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -56,6 +62,7 @@ export default async function WebsiteSettingsPage({
     content?: string;
     published?: string;
     withdrawn?: string;
+    restored?: string;
     blocked?: string;
   }>;
 }) {
@@ -83,7 +90,7 @@ export default async function WebsiteSettingsPage({
   // Which language is being edited. Only ever one the site is actually offered
   // in: a `?content=es` on an English-only site would otherwise open an editor
   // for a page that will never be rendered.
-  const { content: requested, published, withdrawn, blocked } = await searchParams;
+  const { content: requested, published, withdrawn, restored, blocked } = await searchParams;
   const contentLocale: Locale =
     requested && isLocale(requested) && profile.locales.includes(requested)
       ? requested
@@ -99,7 +106,11 @@ export default async function WebsiteSettingsPage({
   const blocks = visibleBlocks(settings, profile, content);
   const baseUrl = resolveAppUrl();
 
+  const versions = site
+    ? await listSiteVersions(supabase, membership.organizationId, site.publishedVersionId)
+    : [];
   const isPublished = site?.status === "published";
+  const liveVersion = versions.find((entry) => entry.isLive)?.version ?? null;
   const liveUrl = profile.slug ? siteUrl(baseUrl, profile.slug, contentLocale) : null;
 
   // Outcomes from `setSiteStatusAction`, which travel in the URL because this
@@ -107,6 +118,7 @@ export default async function WebsiteSettingsPage({
   const notice = ((): { text: string; tone: "ok" | "problem" } | null => {
     if (published) return { text: w.publishedNotice, tone: "ok" };
     if (withdrawn) return { text: w.withdrawnNotice, tone: "ok" };
+    if (restored) return { text: w.restoredNotice, tone: "ok" };
     if (blocked === "not_ready") return { text: w.notReadyNotice, tone: "problem" };
     if (blocked === "not_found") return { text: w.noSiteYetNotice, tone: "problem" };
     if (blocked === "not_owner") return { text: w.notOwnerError, tone: "problem" };
@@ -178,6 +190,12 @@ export default async function WebsiteSettingsPage({
           {isPublished ? w.statusPublished : w.statusDraft}
         </p>
 
+        {isPublished && liveVersion ? (
+          <p className="mt-1 text-sm text-slate-600">
+            {fmt(w.publishedVersion, { version: liveVersion })}
+          </p>
+        ) : null}
+
         {isPublished && liveUrl ? (
           <p className="mt-2 text-sm">
             <a
@@ -219,6 +237,50 @@ export default async function WebsiteSettingsPage({
           {isPublished ? w.unpublishHint : w.publishHint}
         </p>
       </section>
+
+      {/* Version history (§19.10). Only worth a section once there is more than
+          one thing to choose between — a list with a single entry is a list
+          that asks a question nobody has. */}
+      {versions.length > 1 ? (
+        <section className="rounded-2xl border border-slate-200 bg-white p-5">
+          <h2 className="text-sm font-bold uppercase tracking-wide text-slate-500">
+            {w.versionsTitle}
+          </h2>
+          <ul aria-label={w.versionsTitle} className="mt-3 divide-y divide-slate-100">
+            {versions.map((entry) => (
+              <li key={entry.id} className="flex flex-wrap items-center gap-3 py-3">
+                <span className="font-medium text-slate-900">
+                  {fmt(w.versionLabel, { version: entry.version })}
+                </span>
+                <span className="text-sm text-slate-600">
+                  {new Date(entry.publishedAt).toLocaleString(l, {
+                    dateStyle: "medium",
+                    timeStyle: "short",
+                    timeZone: membership.timezone,
+                  })}
+                </span>
+                {entry.isLive ? (
+                  <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-800">
+                    {w.versionLive}
+                  </span>
+                ) : (
+                  <form action={rollbackSiteAction} className="ml-auto">
+                    <input type="hidden" name="locale" value={l} />
+                    <input type="hidden" name="version_id" value={entry.id} />
+                    <button
+                      type="submit"
+                      className="min-h-12 rounded-xl border border-slate-300 px-4 text-sm font-semibold text-slate-800 hover:bg-slate-50"
+                    >
+                      {w.restore}
+                    </button>
+                  </form>
+                )}
+              </li>
+            ))}
+          </ul>
+          <p className="mt-3 text-xs text-slate-500">{w.versionsHint}</p>
+        </section>
+      ) : null}
 
       <section>
         <h2 className="text-lg font-bold text-slate-900">{w.settingsSection}</h2>
