@@ -1269,6 +1269,9 @@ export const es: Dict = {
       restoredNotice: "Esa versión volvió a estar en línea.",
       versionsHint: "Publicar guarda lo que decía la página en ese momento. Restaurar una nunca borra las demás.",
       publishedVersion: "Versión {version} en línea",
+      sitemapTitle: "Mapa del sitio para buscadores",
+      sitemapHint:
+        "Opcional: pega esta dirección en Google Search Console para que tu página se encuentre antes. Funciona sin eso.",
       statusDraft: "Sin publicar. Solo tú lo ves.",
       statusPublished: "Publicado y en línea.",
       preview: "Vista previa",

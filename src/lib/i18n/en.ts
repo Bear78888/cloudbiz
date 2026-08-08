@@ -1289,6 +1289,9 @@ export const en = {
       restoredNotice: "That version is live again.",
       versionsHint: "Publishing saves what the page said at that moment. Restoring one never deletes the others.",
       publishedVersion: "Live version {version}",
+      sitemapTitle: "Sitemap for search engines",
+      sitemapHint:
+        "Optional: paste this address into Google Search Console so your page is found sooner. It works without it.",
       statusDraft: "Not published. Only you can see this.",
       statusPublished: "Published and live.",
       preview: "Preview",
