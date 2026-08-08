@@ -164,6 +164,17 @@ export default async function EstimatePage({
         </p>
       </div>
 
+      {/* §16.9: a PDF of this exact estimate, any status including `draft` —
+          proofing a document before Approve is not the thing §16.5 gates. */}
+      <a
+        href={`/${l}/app/jobs/${jobId}/estimates/${estimateId}/pdf`}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-block text-sm font-semibold text-brand-700 underline"
+      >
+        {e.pdfPreview}
+      </a>
+
       {/* §16.4: the model's own confidence, in front of the owner *before*
           Approve. A low number is not a reason to hide the draft — it is a
           reason to read it closely, which nobody does if nobody says so. */}
