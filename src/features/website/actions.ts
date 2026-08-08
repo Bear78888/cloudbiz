@@ -10,7 +10,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 import type { SiteContentActionState, SiteSettingsActionState } from "./action-state";
 import { parseSiteContentForm, parseSiteSettingsForm } from "./schema";
-import { saveSiteContent, saveSiteSettings, setSiteStatus } from "./service";
+import { rollbackSite, saveSiteContent, saveSiteSettings, setSiteStatus } from "./service";
 
 /**
  * Server actions for the Business Website (§19).
@@ -100,7 +100,13 @@ export async function setSiteStatusAction(formData: FormData): Promise<void> {
   if (membership.role !== "owner") redirect(`${target}?blocked=not_owner`);
   if (next !== "published" && next !== "draft") redirect(target);
 
-  const result = await setSiteStatus(supabase, membership.organizationId, next);
+  // Who pressed it, recorded on the version. Read from the session, never from
+  // the form.
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const result = await setSiteStatus(supabase, membership.organizationId, next, user?.id ?? null);
 
   if (result.ok) {
     trackServerEvent(next === "published" ? "website_published" : "website_unpublished", {
@@ -110,6 +116,35 @@ export async function setSiteStatusAction(formData: FormData): Promise<void> {
 
   revalidatePath(target);
   redirect(result.ok ? `${target}?${next === "published" ? "published" : "withdrawn"}=1` : `${target}?blocked=${result.error}`);
+}
+
+/**
+ * Rolls the live site back to an earlier version (§19.10).
+ *
+ * Separate from `setSiteStatusAction` because it is a different question — not
+ * "should this be public" but "which of the things I published should be". The
+ * version id is checked against the organization in the service; an id in a
+ * POST is not evidence that it belongs to whoever sent it.
+ */
+export async function rollbackSiteAction(formData: FormData): Promise<void> {
+  const locale = localeFrom(formData);
+  const versionId = String(formData.get("version_id") ?? "").trim();
+
+  const { supabase, membership } = await requireContext();
+  if (!membership) redirect(`/${locale}/onboarding`);
+
+  const target = `/${locale}/app/settings/website`;
+  if (membership.role !== "owner") redirect(`${target}?blocked=not_owner`);
+  if (!versionId) redirect(target);
+
+  const result = await rollbackSite(supabase, membership.organizationId, versionId);
+
+  if (result.ok) {
+    trackServerEvent("website_rolled_back", { organization_id: membership.organizationId });
+  }
+
+  revalidatePath(target);
+  redirect(result.ok ? `${target}?restored=1` : `${target}?blocked=${result.error}`);
 }
 
 export async function saveSiteContentAction(

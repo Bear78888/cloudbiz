@@ -1,16 +1,12 @@
 import "server-only";
 
-import {
-  parseBusinessHours,
-  parseServiceArea,
-  parseServices,
-} from "@/features/profile/service";
 import type { Locale } from "@/lib/routes";
 import { must } from "@/lib/supabase/query";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
-import { slugProblem, type SiteColorPreset, type SiteTemplate, type SiteTextContent } from "./model";
-import { buildRenderableSite, type RenderableSite } from "./render";
+import { slugProblem } from "./model";
+import type { RenderableSite } from "./render";
+import { parseSnapshot, renderableFromSnapshot } from "./snapshot";
 
 /**
  * Reading a published site for a visitor (§19.6, §19.10).
@@ -32,6 +28,8 @@ export const FORBIDDEN_PUBLIC_PROFILE_FIELDS = ["notification_settings"] as cons
 export interface PublishedSite {
   organizationId: string;
   site: RenderableSite;
+  /** Which published version the visitor is reading. */
+  version: number;
   /** Every language this site is offered in, for `hreflang` and the switch. */
   locales: Locale[];
 }
@@ -54,87 +52,54 @@ export async function getPublishedSite(
 
   const supabase = createSupabaseAdminClient();
 
+  // The address is a live fact — it is unique across the platform and the owner
+  // may change it — so the lookup starts there and everything after it comes
+  // out of the published snapshot.
   const profileRow = await must(
     supabase
       .from("business_profiles")
-      .select(
-        "organization_id, display_name, owner_name, phone, email, services, service_area, business_hours, google_review_url, supported_locales, website_slug",
-      )
+      .select("organization_id")
       .eq("website_slug", slug)
       .maybeSingle(),
-    "public-site:profile",
+    "public-site:slug",
   );
   if (!profileRow) return null;
-
-  const locales = ((profileRow.supported_locales as string[] | null) ?? ["en"]).filter(
-    (candidate): candidate is Locale => candidate === "en" || candidate === "es",
-  );
-  if (!locales.includes(locale)) return null;
 
   const organizationId = profileRow.organization_id as string;
 
   const siteRow = await must(
     supabase
       .from("business_sites")
-      .select("template, color_preset, status, hidden_blocks")
+      .select("published_version_id")
       .eq("organization_id", organizationId)
       .eq("status", "published")
       .maybeSingle(),
     "public-site:site",
   );
-  if (!siteRow) return null;
+  if (!siteRow?.published_version_id) return null;
 
-  const contentRow = await must(
+  const versionRow = await must(
     supabase
-      .from("business_site_texts")
-      .select(
-        "locale, headline, subheadline, about_text, cta_text, service_area_note, why_choose_us, faq, ai_generated_at, reviewed_at",
-      )
+      .from("business_site_versions")
+      .select("snapshot, version")
       .eq("organization_id", organizationId)
-      .eq("locale", locale)
+      .eq("id", siteRow.published_version_id as string)
       .maybeSingle(),
-    "public-site:content",
+    "public-site:version",
   );
+  if (!versionRow) return null;
 
-  const content: SiteTextContent | null = contentRow
-    ? {
-        locale,
-        headline: (contentRow.headline as string | null) ?? null,
-        subheadline: (contentRow.subheadline as string | null) ?? null,
-        aboutText: (contentRow.about_text as string | null) ?? null,
-        ctaText: (contentRow.cta_text as string | null) ?? null,
-        serviceAreaNote: (contentRow.service_area_note as string | null) ?? null,
-        whyChooseUs: toStrings(contentRow.why_choose_us),
-        faq: toFaq(contentRow.faq),
-        aiGeneratedAt: (contentRow.ai_generated_at as string | null) ?? null,
-        reviewedAt: (contentRow.reviewed_at as string | null) ?? null,
-      }
-    : null;
+  const snapshot = parseSnapshot(versionRow.snapshot);
+  if (!snapshot) return null;
+
+  const site = renderableFromSnapshot(snapshot, locale, slug);
+  if (!site) return null;
 
   return {
     organizationId,
-    locales,
-    site: buildRenderableSite({
-      locale,
-      slug,
-      site: {
-        template: siteRow.template as SiteTemplate,
-        colorPreset: siteRow.color_preset as SiteColorPreset,
-        hiddenBlocks: (siteRow.hidden_blocks as string[] | null) ?? [],
-      },
-      profile: {
-        displayName: profileRow.display_name as string,
-        ownerName: (profileRow.owner_name as string | null) ?? null,
-        phone: (profileRow.phone as string | null) ?? null,
-        email: (profileRow.email as string | null) ?? null,
-        services: parseServices(profileRow.services),
-        serviceArea: parseServiceArea(profileRow.service_area),
-        businessHours: parseBusinessHours(profileRow.business_hours),
-        googleReviewUrl: (profileRow.google_review_url as string | null) ?? null,
-        supportedLocales: locales,
-      },
-      content,
-    }),
+    version: versionRow.version as number,
+    locales: snapshot.profile.supportedLocales,
+    site,
   };
 }
 
@@ -146,43 +111,36 @@ export async function defaultLocaleForSite(slug: string): Promise<Locale | null>
   const row = await must(
     supabase
       .from("business_profiles")
-      .select("organization_id, supported_locales")
+      .select("organization_id")
       .eq("website_slug", slug)
       .maybeSingle(),
     "public-site:default-locale",
   );
   if (!row) return null;
 
-  // Unpublished sites get no redirect either: following one to a 404 would
-  // still confirm the business exists.
-  const published = await must(
+  // Read from the published version, not the draft: the languages the site is
+  // offered in are part of what was published, and an unpublished site gets no
+  // redirect either — following one to a 404 would still confirm it exists.
+  const siteRow = await must(
     supabase
       .from("business_sites")
-      .select("organization_id")
+      .select("published_version_id")
       .eq("organization_id", row.organization_id as string)
       .eq("status", "published")
       .maybeSingle(),
     "public-site:default-locale-status",
   );
-  if (!published) return null;
+  if (!siteRow?.published_version_id) return null;
 
-  const locales = ((row.supported_locales as string[] | null) ?? ["en"]).filter(
-    (candidate): candidate is Locale => candidate === "en" || candidate === "es",
+  const versionRow = await must(
+    supabase
+      .from("business_site_versions")
+      .select("snapshot")
+      .eq("organization_id", row.organization_id as string)
+      .eq("id", siteRow.published_version_id as string)
+      .maybeSingle(),
+    "public-site:default-locale-version",
   );
-  return locales[0] ?? null;
-}
-
-function toStrings(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  return value.filter((entry): entry is string => typeof entry === "string");
-}
-
-function toFaq(value: unknown): { question: string; answer: string }[] {
-  if (!Array.isArray(value)) return [];
-  return value.flatMap((entry) => {
-    if (entry === null || typeof entry !== "object") return [];
-    const record = entry as Record<string, unknown>;
-    if (typeof record.question !== "string" || typeof record.answer !== "string") return [];
-    return [{ question: record.question, answer: record.answer }];
-  });
+  const snapshot = versionRow ? parseSnapshot(versionRow.snapshot) : null;
+  return snapshot?.profile.supportedLocales[0] ?? null;
 }
