@@ -11,6 +11,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { SiteContentActionState, SiteSettingsActionState } from "./action-state";
 import { parseSiteContentForm, parseSiteSettingsForm } from "./schema";
 import { rollbackSite, saveSiteContent, saveSiteSettings, setSiteStatus } from "./service";
+import { translateSiteContent } from "./translate";
 
 /**
  * Server actions for the Business Website (§19).
@@ -145,6 +146,45 @@ export async function rollbackSiteAction(formData: FormData): Promise<void> {
 
   revalidatePath(target);
   redirect(result.ok ? `${target}?restored=1` : `${target}?blocked=${result.error}`);
+}
+
+/**
+ * Drafts one language from another with the model (§19.5).
+ *
+ * The result is a draft in the strong sense: it lands with `ai_generated_at`
+ * set and nothing marking it reviewed, which is the state `siteBlockers`
+ * refuses to publish. A person has to open it, read it and save it — and their
+ * save is what counts as confirming the translation.
+ */
+export async function translateSiteContentAction(formData: FormData): Promise<void> {
+  const locale = localeFrom(formData);
+  const targetLocale = contentLocaleFrom(formData);
+  const sourceRaw = String(formData.get("source_locale") ?? "");
+  const sourceLocale: Locale = isLocale(sourceRaw) ? sourceRaw : "en";
+
+  const { supabase, membership } = await requireContext();
+  if (!membership) redirect(`/${locale}/onboarding`);
+
+  const target = `/${locale}/app/settings/website?content=${targetLocale}`;
+  if (membership.role !== "owner") redirect(`${target}&blocked=not_owner`);
+
+  const result = await translateSiteContent(
+    supabase,
+    membership.organizationId,
+    sourceLocale,
+    targetLocale,
+  );
+
+  if (result.ok) {
+    trackServerEvent("website_translated", {
+      organization_id: membership.organizationId,
+      source_locale: sourceLocale,
+      target_locale: targetLocale,
+    });
+  }
+
+  revalidatePath(`/${locale}/app/settings/website`);
+  redirect(result.ok ? `${target}&translated=1` : `${target}&blocked=${result.error}`);
 }
 
 export async function saveSiteContentAction(

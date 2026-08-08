@@ -5,7 +5,11 @@ import { notFound, redirect } from "next/navigation";
 import { getCurrentMembership } from "@/features/organizations/service";
 import { SiteContentForm } from "@/features/website/SiteContentForm";
 import { SiteSettingsForm } from "@/features/website/SiteSettingsForm";
-import { rollbackSiteAction, setSiteStatusAction } from "@/features/website/actions";
+import {
+  rollbackSiteAction,
+  setSiteStatusAction,
+  translateSiteContentAction,
+} from "@/features/website/actions";
 import { needsReview, siteBlockers, siteUrl, visibleBlocks } from "@/features/website/model";
 import {
   contentFor,
@@ -63,6 +67,7 @@ export default async function WebsiteSettingsPage({
     published?: string;
     withdrawn?: string;
     restored?: string;
+    translated?: string;
     blocked?: string;
   }>;
 }) {
@@ -90,13 +95,30 @@ export default async function WebsiteSettingsPage({
   // Which language is being edited. Only ever one the site is actually offered
   // in: a `?content=es` on an English-only site would otherwise open an editor
   // for a page that will never be rendered.
-  const { content: requested, published, withdrawn, restored, blocked } = await searchParams;
+  const {
+    content: requested,
+    published,
+    withdrawn,
+    restored,
+    translated,
+    blocked,
+  } = await searchParams;
   const contentLocale: Locale =
     requested && isLocale(requested) && profile.locales.includes(requested)
       ? requested
       : (profile.locales[0] ?? "en");
 
   const content = contentFor(contentRows, contentLocale);
+
+  // Which language this one could be drafted from: another offered language
+  // that actually has something in it. Offering to translate from a blank page
+  // would be offering to spend a model call on nothing.
+  const translationSource =
+    profile.locales.find((candidate) => {
+      if (candidate === contentLocale) return false;
+      const other = contentFor(contentRows, candidate);
+      return Boolean(other.headline?.trim()) || Boolean(other.aboutText?.trim());
+    }) ?? null;
   const blockers = siteBlockers({
     slug: profile.slug,
     locales: profile.locales,
@@ -119,6 +141,10 @@ export default async function WebsiteSettingsPage({
     if (published) return { text: w.publishedNotice, tone: "ok" };
     if (withdrawn) return { text: w.withdrawnNotice, tone: "ok" };
     if (restored) return { text: w.restoredNotice, tone: "ok" };
+    if (blocked === "limit_reached") return { text: w.translateLimitNotice, tone: "problem" };
+    if (blocked === "not_configured") return { text: w.translateOffNotice, tone: "problem" };
+    if (blocked === "no_source") return { text: w.translateNoSourceNotice, tone: "problem" };
+    if (blocked === "unavailable") return { text: w.translateFailedNotice, tone: "problem" };
     if (blocked === "not_ready") return { text: w.notReadyNotice, tone: "problem" };
     if (blocked === "not_found") return { text: w.noSiteYetNotice, tone: "problem" };
     if (blocked === "not_owner") return { text: w.notOwnerError, tone: "problem" };
@@ -338,6 +364,33 @@ export default async function WebsiteSettingsPage({
               );
             })}
           </nav>
+        ) : null}
+
+        {/* §19.5: the model drafts, the owner confirms. The button is a form of
+            its own and sits outside the editor — a form cannot be nested inside
+            another form, and this one must not carry the editor's fields. */}
+        {translationSource ? (
+          <form action={translateSiteContentAction} className="mt-4">
+            <input type="hidden" name="locale" value={l} />
+            <input type="hidden" name="content_locale" value={contentLocale} />
+            <input type="hidden" name="source_locale" value={translationSource} />
+            <button
+              type="submit"
+              className="inline-flex min-h-12 items-center rounded-xl border-2 border-brand-200 bg-white px-5 font-semibold text-brand-800 hover:border-brand-400 hover:bg-brand-50"
+            >
+              {fmt(w.translateFrom, { language: w.localeNames[translationSource] })}
+            </button>
+            <p className="mt-2 text-xs text-slate-500">{w.translateHint}</p>
+          </form>
+        ) : null}
+
+        {translated ? (
+          <p
+            role="status"
+            className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-900"
+          >
+            {w.translatedNotice}
+          </p>
         ) : null}
 
         {/* §19.5: a machine translation is a draft until a person says

@@ -30,6 +30,7 @@ export const ANALYTICS_EVENTS = [
   "website_published",
   "website_unpublished",
   "website_rolled_back",
+  "website_translated",
   "google_connect_started",
   "google_connected",
   "google_sync_failed",

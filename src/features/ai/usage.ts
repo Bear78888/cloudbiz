@@ -199,3 +199,86 @@ export async function recordTranscriptionUsage(input: {
     console.error("[ai-usage] could not record a transcription:", error.message);
   }
 }
+
+/**
+ * The site translation cap and ledger (§19.5).
+ *
+ * A different `feature_code` this time, because the Business Website genuinely
+ * is a different product the owner buys separately — unlike the voice note,
+ * which was a second way into the same estimate. `metadata.tool` is still set
+ * and still filtered on explicitly: the day a second kind of model call lands
+ * under `business_website`, a count that ignored it would merge two caps.
+ */
+export const SITE_TRANSLATIONS_PER_DAY = LIMITS.business_website.aiTranslationsPerDay;
+
+const WEBSITE_FEATURE_CODE = "business_website";
+const TRANSLATION_TOOL = "site_translation";
+
+export async function siteTranslationsUsedToday(organizationId: string): Promise<number> {
+  const supabase = createSupabaseAdminClient();
+  const since = new Date();
+  since.setUTCHours(0, 0, 0, 0);
+
+  const { count, error } = await supabase
+    .from("usage_events")
+    .select("id", { count: "exact", head: true })
+    .eq("organization_id", organizationId)
+    .eq("feature_code", WEBSITE_FEATURE_CODE)
+    .eq("metadata->>tool", TRANSLATION_TOOL)
+    .gte("occurred_at", since.toISOString());
+
+  if (error) {
+    // Same fail-open reasoning as the other two counts.
+    console.error("[ai-usage] could not count today's translations:", error.message);
+    return Number.NaN;
+  }
+
+  return count ?? 0;
+}
+
+export async function checkSiteTranslationLimit(organizationId: string): Promise<LimitCheck> {
+  const used = await siteTranslationsUsedToday(organizationId);
+  if (Number.isNaN(used)) {
+    return { allowed: true, used: 0, limit: SITE_TRANSLATIONS_PER_DAY };
+  }
+  return {
+    allowed: used < SITE_TRANSLATIONS_PER_DAY,
+    used,
+    limit: SITE_TRANSLATIONS_PER_DAY,
+  };
+}
+
+/** Records one translation call, including one that produced nothing usable. */
+export async function recordSiteTranslationUsage(input: {
+  organizationId: string;
+  usage: AiUsage | null;
+  promptVersion: string;
+  validation: string;
+  sourceLocale: string;
+  targetLocale: string;
+}): Promise<void> {
+  const supabase = createSupabaseAdminClient();
+
+  const { error } = await supabase.from("usage_events").insert({
+    organization_id: input.organizationId,
+    feature_code: WEBSITE_FEATURE_CODE,
+    quantity: 1,
+    provider_cost: input.usage?.providerCost ?? null,
+    idempotency_key: `site-translation:${randomUUID()}`,
+    metadata: {
+      tool: TRANSLATION_TOOL,
+      prompt_version: input.promptVersion,
+      model: input.usage?.model ?? null,
+      latency_ms: input.usage?.latencyMs ?? null,
+      input_tokens: input.usage?.inputTokens ?? null,
+      output_tokens: input.usage?.outputTokens ?? null,
+      validation: input.validation,
+      source_locale: input.sourceLocale,
+      target_locale: input.targetLocale,
+    },
+  });
+
+  if (error) {
+    console.error("[ai-usage] could not record a translation:", error.message);
+  }
+}
