@@ -30,7 +30,10 @@ const WEBSITE_PATH = "/en/app/settings/website";
 async function makeSitePublishable(page: import("@playwright/test").Page, stamp: string) {
   await page.goto(PROFILE_PATH);
   await page.locator("#phone").fill("(512) 555-0134");
-  await page.locator("#email").fill(`shop-${stamp}@handyalliance.test`);
+  // Deliberately not a handyalliance.test address: this email is rendered on
+  // the public page, and the branding assertion below would then match the
+  // fixture rather than anything the page actually says about us.
+  await page.locator("#email").fill(`shop-${stamp}@example.test`);
   await page.locator("#zip_codes").fill("78701");
   await page.locator("#cities").fill("Austin");
   await page.getByRole("button", { name: "+ Drain cleaning" }).click();
@@ -109,6 +112,11 @@ test("a published site is the contractor's page and advertises nothing of ours",
   // area beyond what was typed, and no section left standing empty.
   expect(body).not.toContain("read reviews on google");
   expect(body).toContain("austin");
+  // Hours were never filled in, so the page says nothing about them. It must
+  // not announce a business that is shut seven days a week — which is what the
+  // first version of this page did, and only a rendered page could show it.
+  expect(body).not.toContain("closed");
+  expect(body).not.toContain("hours");
 
   // Unlike the estimate link, this page is meant to be found (§19.8).
   await expect(visitor.locator('meta[name="robots"]')).toHaveCount(0);
