@@ -6,6 +6,7 @@ import { LIMITS } from "@/lib/config";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 import type { AiUsage } from "./client";
+import type { TranscribeUsage } from "./transcribe";
 
 /**
  * The daily cap on model calls, and the record of every one (§27.6, §15.11).
@@ -113,5 +114,88 @@ export async function recordDraftUsage(input: {
     // The call happened and cost money. Losing the record is worth shouting
     // about, but not worth failing the owner's request over.
     console.error("[ai-usage] could not record a draft:", error.message);
+  }
+}
+
+/**
+ * The voice note's daily cap and ledger (§16.3, §16.12).
+ *
+ * `usage_events.feature_code` has a fixed check constraint (see the platform
+ * migration) that does not include a transcription-specific value, and
+ * adding one would be a schema change for what is really the same feature
+ * from the customer's point of view — a second way to fill in the same
+ * description field. So this stays under `FEATURE_CODE` too, distinguished
+ * only by `metadata.tool`, which is why every query below adds that filter
+ * explicitly rather than reusing `draftsUsedToday`/`recordDraftUsage` as-is —
+ * those count *all* `estimate_quote_maker` events, which would either merge
+ * the two caps into one or double-count the same organization's usage.
+ */
+export const VOICE_TRANSCRIPTIONS_PER_DAY = LIMITS.estimate_quote_maker.voiceTranscriptionsPerDay;
+
+const TRANSCRIPTION_TOOL = "voice_transcription";
+
+export async function transcriptionsUsedToday(organizationId: string): Promise<number> {
+  const supabase = createSupabaseAdminClient();
+  const since = new Date();
+  since.setUTCHours(0, 0, 0, 0);
+
+  const { count, error } = await supabase
+    .from("usage_events")
+    .select("id", { count: "exact", head: true })
+    .eq("organization_id", organizationId)
+    .eq("feature_code", FEATURE_CODE)
+    .eq("metadata->>tool", TRANSCRIPTION_TOOL)
+    .gte("occurred_at", since.toISOString());
+
+  if (error) {
+    // Same fail-open reasoning as draftsUsedToday: a database hiccup must not
+    // hand out unlimited transcription, but it also must not lock an owner
+    // out of a tool they pay for over our own failure.
+    console.error("[ai-usage] could not count today's transcriptions:", error.message);
+    return Number.NaN;
+  }
+
+  return count ?? 0;
+}
+
+export async function checkTranscriptionLimit(organizationId: string): Promise<LimitCheck> {
+  const used = await transcriptionsUsedToday(organizationId);
+  if (Number.isNaN(used)) {
+    return { allowed: true, used: 0, limit: VOICE_TRANSCRIPTIONS_PER_DAY };
+  }
+  return { allowed: used < VOICE_TRANSCRIPTIONS_PER_DAY, used, limit: VOICE_TRANSCRIPTIONS_PER_DAY };
+}
+
+/**
+ * Records one transcription call — including a failed or empty one, which
+ * still cost money against the same provider (§27.6).
+ */
+export async function recordTranscriptionUsage(input: {
+  organizationId: string;
+  usage: TranscribeUsage | null;
+  /** What came back: "ok", or the reason it did not. */
+  validation: string;
+  estimateId: string | null;
+}): Promise<void> {
+  const supabase = createSupabaseAdminClient();
+
+  const { error } = await supabase.from("usage_events").insert({
+    organization_id: input.organizationId,
+    feature_code: FEATURE_CODE,
+    quantity: 1,
+    provider_cost: input.usage?.providerCost ?? null,
+    idempotency_key: `voice-transcription:${randomUUID()}`,
+    metadata: {
+      tool: TRANSCRIPTION_TOOL,
+      model: input.usage?.model ?? null,
+      latency_ms: input.usage?.latencyMs ?? null,
+      duration_seconds: input.usage?.durationSeconds ?? null,
+      validation: input.validation,
+      estimate_id: input.estimateId,
+    },
+  });
+
+  if (error) {
+    console.error("[ai-usage] could not record a transcription:", error.message);
   }
 }

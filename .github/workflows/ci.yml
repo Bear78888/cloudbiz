@@ -250,6 +250,15 @@ jobs:
           done
           curl -sf http://127.0.0.1:4546/__stub/health > /dev/null
 
+      - name: Start the Transcribe stub
+        run: |
+          node tests/e2e/transcribe-stub.mjs &
+          for _ in $(seq 1 20); do
+            curl -sf http://127.0.0.1:4548/__stub/health > /dev/null && break
+            sleep 0.5
+          done
+          curl -sf http://127.0.0.1:4548/__stub/health > /dev/null
+
       - name: Point Google at the stub
         run: |
           {
@@ -272,6 +281,11 @@ jobs:
             echo "AI_PROVIDER_API_KEY=stub-ai-key"
             echo "AI_PROVIDER_MODEL=claude-sonnet-5"
             echo "AI_STUB_STATE=/tmp/ai-stub.json"
+            # Speech-to-text (§16.3) is a separate stubbed provider, same reasoning.
+            echo "TRANSCRIBE_API_BASE=http://127.0.0.1:4548"
+            echo "TRANSCRIBE_API_KEY=stub-transcribe-key"
+            echo "TRANSCRIBE_MODEL=whisper-1"
+            echo "TRANSCRIBE_STUB_STATE=/tmp/transcribe-stub.json"
           } >> "$GITHUB_ENV"
 
       - name: Build

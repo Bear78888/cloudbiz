@@ -84,7 +84,19 @@ export const LIMITS = {
    * 50 a day is far above what a one-person trade does — a busy pro quotes a
    * handful of jobs a day — and far below what a loop or a scraper does.
    */
-  estimate_quote_maker: { aiDraftsPerDay: 50 },
+  estimate_quote_maker: {
+    aiDraftsPerDay: 50,
+    /**
+     * Voice notes (§16.3) go through a second, separate provider (speech-to-
+     * text, not the drafting model), so they get their own daily ceiling
+     * rather than sharing the drafts one — a busy day of dictating job
+     * descriptions is not the same cost as a busy day of drafting, and a
+     * single number would either starve one or leave the other uncapped.
+     * 30 a day covers dictating more job descriptions than a one-person shop
+     * writes in a day, same reasoning as `aiDraftsPerDay` above.
+     */
+    voiceTranscriptionsPerDay: 30,
+  },
   reviews_followups: { includedSms: 200 },
   bad_lead_refund_helper: { includedAnalyses: 10 },
   business_website: { sitesPerOrganization: 1 },

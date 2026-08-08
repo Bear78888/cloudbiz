@@ -27,6 +27,7 @@ export const serverOnlyEnvironmentNames = [
   "STRIPE_SECRET_KEY",
   "STRIPE_WEBHOOK_SECRET",
   "AI_PROVIDER_API_KEY",
+  "TRANSCRIBE_API_KEY",
   "RESEND_API_KEY",
   "GOOGLE_CLIENT_SECRET",
   "GOOGLE_TOKEN_ENCRYPTION_KEY",
@@ -137,6 +138,11 @@ const integrationEnvironmentObject = platformEnvironmentObject.extend({
   // closed on its own when its variable is missing.
   AI_PROVIDER_API_KEY: z.string().min(1).optional(),
   AI_PROVIDER_MODEL: z.string().min(1).optional(),
+  // Speech-to-text for the estimate voice note (§16.3) — a separate vendor
+  // from AI_PROVIDER_* above, optional for the same reason: the feature fails
+  // closed (src/features/ai/transcribe.ts) until the owner adds a key.
+  TRANSCRIBE_API_KEY: z.string().min(1).optional(),
+  TRANSCRIBE_MODEL: z.string().min(1).optional(),
   RESEND_API_KEY: z.string().min(1).optional(),
   RESEND_FROM_EMAIL: z.email({ error: "RESEND_FROM_EMAIL must be a valid address" }).optional(),
   GOOGLE_CLIENT_ID: z.string().min(1).optional(),

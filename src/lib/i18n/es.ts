@@ -1054,6 +1054,18 @@ export const es: Dict = {
       aiDescriptionPlaceholder: "El cliente dice que el calentador de agua gotea, 40 galones, en el garaje, lo necesita esta semana.",
       aiDraftButton: "Escribir un borrador",
       aiReplacesLines: "Esto reemplaza las líneas de abajo. Tú defines el precio final.",
+      aiVoiceButton: "Grabar una nota de voz",
+      aiVoiceTranscribing: "Transcribiendo…",
+      aiVoiceHint: "La convertiremos en texto arriba: revísalo antes de generar el borrador.",
+      aiVoiceErrors: {
+        not_configured: "Las notas de voz aún no están activadas. Escribe la descripción en su lugar.",
+        limit_reached: "Ya usaste las notas de voz de hoy. Escribe la descripción en su lugar.",
+        too_large: "Esa grabación es demasiado larga. Que dure menos de un par de minutos, o escribe la descripción.",
+        no_audio: "No llegó audio. Inténtalo de nuevo.",
+        not_editable: "Este presupuesto ya salió. Crea una versión nueva.",
+        network: "No se pudo conectar con el servidor. Inténtalo de nuevo.",
+        unavailable: "La nota de voz no llegó. Inténtalo de nuevo, o escribe la descripción.",
+      },
       draftedNotice: "Borrador listo. Revisa los precios antes de aprobarlo.",
       aiCheckBeforeApprove: "Léelo antes de aprobar: los precios son un punto de partida, no una cotización.",
       aiConfidenceLabel: {

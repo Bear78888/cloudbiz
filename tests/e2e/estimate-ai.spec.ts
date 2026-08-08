@@ -2,16 +2,7 @@ import { readFileSync } from "node:fs";
 
 import { expect, test } from "@playwright/test";
 
-import {
-  banner,
-  createJob,
-  createOrganization,
-  formWith,
-  signUp,
-  submitAndSettle,
-  uniqueEmail,
-  visibleText,
-} from "./helpers";
+import { banner, formWith, newDraftEstimate, submitAndSettle, visibleText } from "./helpers";
 
 /**
  * Drafting an estimate with the model (§16.2–16.4, §27.3).
@@ -40,17 +31,27 @@ function sentToModel(): StubRequest[] {
   }
 }
 
-async function newDraftEstimate(page: import("@playwright/test").Page, prefix: string) {
-  await signUp(page, uniqueEmail(prefix));
-  await createOrganization(page, `AI Test ${Date.now().toString(36)}`);
-  const jobUrl = await createJob(page, {
-    customer: "Marta Delgado",
-    title: "Water heater replacement",
+// Mirrors ai-stub.mjs's own initial `nextReply`. The stub is one long-lived
+// process for the whole run, not reset between files, so "a low-confidence
+// draft is flagged, not hidden" below — the one test here that overrides the
+// reply — leaves it overridden for whichever spec file happens to run next
+// and also calls "Write a draft" expecting an ordinary one.
+const DEFAULT_REPLY = JSON.stringify({
+  scope: "Replace the leaking water heater and haul away the old unit.",
+  items: [
+    { item_type: "labor", description: "Installation, 3 hours", quantity: 3, unit_price: 95 },
+    { item_type: "material", description: "40-gallon water heater", quantity: 1, unit_price: 780 },
+  ],
+  confidence: 0.82,
+  assumptions: ["Standard 40-gallon tank", "Existing connections are to code"],
+});
+
+test.afterEach(async ({ page }) => {
+  await page.request.post(`${STUB_BASE}/__stub/reply`, {
+    data: DEFAULT_REPLY,
+    headers: { "content-type": "text/plain" },
   });
-  await submitAndSettle(page, page.getByRole("button", { name: /Create estimate/i }));
-  await page.waitForURL(/\/estimates\/[0-9a-f-]{36}/, { timeout: 30_000 });
-  return { estimateUrl: page.url(), jobUrl };
-}
+});
 
 test("a description becomes a draft the owner still has to approve", async ({ page }) => {
   const { estimateUrl } = await newDraftEstimate(page, "ai-draft");

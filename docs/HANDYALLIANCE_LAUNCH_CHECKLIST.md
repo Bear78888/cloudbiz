@@ -38,6 +38,8 @@
 перевыпускаются одним заходом здесь.
 
 - [ ] `AI_PROVIDER_API_KEY` (Anthropic) перевыпущен, старый отозван.
+- [ ] `TRANSCRIBE_API_KEY` (речь-в-текст, §16.3) перевыпущен, старый отозван —
+      если к моменту переезда уже заведён (см. `HANDYALLIANCE_OWNER_ACTIONS.md` §1a).
 - [ ] `GOOGLE_CLIENT_SECRET` перевыпущен, старый отозван.
 - [ ] `GOOGLE_PICKER_API_KEY` перевыпущен **и ограничен по HTTP-referrer** на
       `handyalliance.com` — ограничение имеет смысл только после переезда,

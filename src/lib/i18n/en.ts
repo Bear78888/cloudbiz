@@ -1074,6 +1074,18 @@ export const en = {
       aiDescriptionPlaceholder: "Customer says the water heater is leaking, 40 gallon, garage, needs it done this week.",
       aiDraftButton: "Write a draft",
       aiReplacesLines: "This replaces the lines below. You set the final price.",
+      aiVoiceButton: "Record a voice note",
+      aiVoiceTranscribing: "Transcribing…",
+      aiVoiceHint: "We'll turn it into text above — read it over before drafting.",
+      aiVoiceErrors: {
+        not_configured: "Voice notes aren't turned on yet. Type the description instead.",
+        limit_reached: "You've used today's voice notes. Type the description instead.",
+        too_large: "That recording is too long. Keep it under a couple of minutes, or type the description.",
+        no_audio: "No audio came through. Please try again.",
+        not_editable: "This estimate has already gone out. Create a new version instead.",
+        network: "Couldn't reach the server. Please try again.",
+        unavailable: "The voice note didn't come through. Please try again, or type the description.",
+      },
       draftedNotice: "Draft ready. Check the prices before you approve it.",
       aiCheckBeforeApprove: "Read it through before approving — the prices are a starting point, not a quote.",
       aiConfidenceLabel: {
